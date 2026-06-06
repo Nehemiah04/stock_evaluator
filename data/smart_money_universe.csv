@@ -1,0 +1,21 @@
+institution,type,city,country,assets_or_aum_trillions,latitude,longitude,trackability
+ICBC,Bank,Beijing,China,7.65,39.9042,116.4074,Low
+Agricultural Bank of China,Bank,Beijing,China,6.97,39.9042,116.4074,Low
+China Construction Bank,Bank,Beijing,China,6.52,39.9042,116.4074,Low
+Bank of China,Bank,Beijing,China,5.48,39.9042,116.4074,Low
+JPMorgan Chase,Bank,New York,USA,4.42,40.7128,-74.0060,High
+Bank of America,Bank,Charlotte,USA,3.41,35.2271,-80.8431,High
+BNP Paribas,Bank,Paris,France,3.28,48.8566,2.3522,Medium
+HSBC Holdings,Bank,London,UK,3.21,51.5072,-0.1276,Medium
+Crédit Agricole,Bank,Montrouge,France,3.15,48.8172,2.3219,Medium
+Citigroup,Bank,New York,USA,2.62,40.7128,-74.0060,High
+Blackstone,Private Equity / Alt Manager,New York,USA,1.30,40.7128,-74.0060,High
+Apollo Global Management,Private Equity / Alt Manager,New York,USA,0.938,40.7128,-74.0060,High
+KKR,Private Equity / Alt Manager,New York,USA,0.744,40.7128,-74.0060,High
+Ares Management,Private Equity / Alt Manager,Los Angeles,USA,0.623,34.0522,-118.2437,High
+Brookfield Asset Management,Private Equity / Alt Manager,Toronto,Canada,0.603,43.6532,-79.3832,Medium
+The Carlyle Group,Private Equity / Alt Manager,Washington DC,USA,0.477,38.9072,-77.0369,High
+TPG,Private Equity / Alt Manager,Fort Worth,USA,0.303,32.7555,-97.3308,High
+EQT,Private Equity / Alt Manager,Stockholm,Sweden,0.290,59.3293,18.0686,Medium
+Blue Owl Capital,Private Equity / Alt Manager,New York,USA,0.235,40.7128,-74.0060,High
+CVC Capital Partners,Private Equity / Alt Manager,London,UK,0.220,51.5072,-0.1276,Lows
