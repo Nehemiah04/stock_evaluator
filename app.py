@@ -14,7 +14,7 @@ from src.institution_map import (
     load_institution_universe,
     build_institution_summary,
     build_institution_heatmap_figure,
-    prepare_institution_table
+    prepare_institution_table,
 )
 from src.institutional_holdings import (
     load_institution_holdings_sample,
@@ -22,10 +22,15 @@ from src.institutional_holdings import (
     build_holdings_summary,
     build_institution_sector_treemap,
     build_sector_institution_treemap,
-    prepare_holdings_table
+    prepare_holdings_table,
 )
 from src.institutional_connector import build_live_institutional_holdings
 from src.sec_13f_connector import build_sec_13f_holdings
+from src.institutional_scoring import (
+    build_institutional_smart_money_summary,
+    build_institutional_score_table,
+    build_top_flow_tables,
+)
 
 
 # -----------------------------
@@ -33,7 +38,7 @@ from src.sec_13f_connector import build_sec_13f_holdings
 # -----------------------------
 st.set_page_config(
     page_title="Stock Evaluator",
-    layout="wide"
+    layout="wide",
 )
 
 st.title("Stock Evaluator Dashboard")
@@ -62,13 +67,16 @@ def get_cached_scan_history():
 def get_cached_latest_scan():
     return load_latest_scan()
 
+
 @st.cache_data(ttl=3600)
 def get_cached_institution_universe():
     return load_institution_universe("data/smart_money_universe.csv")
 
+
 @st.cache_data(ttl=3600)
 def get_cached_institution_holdings_sample():
     return load_institution_holdings_sample("data/institution_holdings_sample.csv")
+
 
 @st.cache_data(ttl=3600)
 def get_cached_live_institution_holdings(api_key: str, report_date: str, page_limit: int):
@@ -77,9 +85,11 @@ def get_cached_live_institution_holdings(api_key: str, report_date: str, page_li
         report_date=report_date,
         page_limit=page_limit,
     )
+
+
 @st.cache_data(ttl=3600)
 def get_cached_sec_13f_holdings(manager_limit: int):
-        return build_sec_13f_holdings(
+    return build_sec_13f_holdings(
         manager_limit=manager_limit,
     )
 
@@ -133,6 +143,38 @@ def format_number(value):
     return f"{value:.2f}"
 
 
+def get_active_institutional_holdings_for_scoring() -> pd.DataFrame:
+    """
+    Gets the best available institutional holdings data for Single Ticker scoring.
+
+    Priority:
+    1. SEC 13F data loaded in Institution Map
+    2. FMP live data loaded in Institution Map
+    3. Sample CSV fallback
+    """
+
+    sec_df = st.session_state.get("sec_13f_holdings_df", pd.DataFrame())
+
+    if not sec_df.empty:
+        holdings_df = sec_df
+    else:
+        live_df = st.session_state.get("live_institutional_holdings_df", pd.DataFrame())
+
+        if not live_df.empty:
+            holdings_df = live_df
+        else:
+            holdings_df = get_cached_institution_holdings_sample()
+
+    institution_df = get_cached_institution_universe()
+
+    merged_df = merge_holdings_with_universe(
+        holdings_df=holdings_df,
+        universe_df=institution_df,
+    )
+
+    return merged_df
+
+
 # -----------------------------
 # Sidebar
 # -----------------------------
@@ -141,7 +183,7 @@ st.sidebar.header("Controls")
 mode = st.sidebar.radio(
     "Dashboard Mode",
     ["Single Ticker", "Watchlist Scanner", "Score History", "Institution Map"],
-    key="dashboard_mode"
+    key="dashboard_mode",
 )
 
 st.sidebar.markdown("---")
@@ -158,7 +200,7 @@ if mode == "Single Ticker":
     ticker = st.sidebar.text_input(
         "Enter ticker",
         value="NVDA",
-        key="single_ticker_input"
+        key="single_ticker_input",
     ).upper()
 
     if not ticker:
@@ -183,7 +225,7 @@ if mode == "Single Ticker":
                     max_value=100.0,
                     value=10.0,
                     step=1.0,
-                    key="dcf_growth_rate_input"
+                    key="dcf_growth_rate_input",
                 )
 
                 discount_rate_input = st.number_input(
@@ -192,7 +234,7 @@ if mode == "Single Ticker":
                     max_value=50.0,
                     value=10.0,
                     step=0.5,
-                    key="discount_rate_input"
+                    key="discount_rate_input",
                 )
 
                 terminal_growth_rate_input = st.number_input(
@@ -201,7 +243,7 @@ if mode == "Single Ticker":
                     max_value=10.0,
                     value=3.0,
                     step=0.25,
-                    key="terminal_growth_rate_input"
+                    key="terminal_growth_rate_input",
                 )
 
                 dcf_years_input = st.number_input(
@@ -210,7 +252,7 @@ if mode == "Single Ticker":
                     max_value=10,
                     value=5,
                     step=1,
-                    key="dcf_years_input"
+                    key="dcf_years_input",
                 )
 
                 eps_growth_rate_input = st.number_input(
@@ -219,7 +261,7 @@ if mode == "Single Ticker":
                     max_value=100.0,
                     value=10.0,
                     step=1.0,
-                    key="eps_growth_rate_input"
+                    key="eps_growth_rate_input",
                 )
 
                 future_pe_input = st.number_input(
@@ -228,8 +270,9 @@ if mode == "Single Ticker":
                     max_value=100.0,
                     value=25.0,
                     step=1.0,
-                    key="future_pe_input"
+                    key="future_pe_input",
                 )
+
             with st.expander("Smart Money Map Inputs", expanded=False):
                 smart_money_options = [
                     "Strong Bullish",
@@ -239,42 +282,43 @@ if mode == "Single Ticker":
                     "Slightly Bearish",
                     "Bearish",
                     "Strong Bearish",
-                    "Unknown"
+                    "Unknown",
                 ]
 
                 insider_signal_input = st.selectbox(
                     "Insider Buying/Selling Signal",
                     smart_money_options,
                     index=3,
-                    key="insider_signal_input"
+                    key="insider_signal_input",
                 )
 
                 officer_signal_input = st.selectbox(
                     "Senior Officer Signal",
                     smart_money_options,
                     index=3,
-                    key="officer_signal_input"
+                    key="officer_signal_input",
                 )
 
                 institutional_signal_input = st.selectbox(
                     "Institutional Flow Signal",
                     smart_money_options,
                     index=3,
-                    key="institutional_signal_input"
+                    key="institutional_signal_input",
                 )
 
                 politician_signal_input = st.selectbox(
                     "Politician Trading Signal",
                     smart_money_options,
                     index=3,
-                    key="politician_signal_input"
+                    key="politician_signal_input",
                 )
 
                 smart_money_notes_input = st.text_area(
                     "Smart Money Notes",
                     value="",
-                    key="smart_money_notes_input"
+                    key="smart_money_notes_input",
                 )
+
             valuation = build_valuation_summary(
                 fundamentals=fundamentals,
                 current_price=metrics["current_price"],
@@ -284,22 +328,56 @@ if mode == "Single Ticker":
                 dcf_years=int(dcf_years_input),
                 eps_growth_rate=eps_growth_rate_input / 100,
                 future_pe=future_pe_input,
-                eps_years=5
+                eps_years=5,
             )
+
             smart_money = build_smart_money_summary(
                 insider_signal=insider_signal_input,
                 politician_signal=politician_signal_input,
                 institutional_signal=institutional_signal_input,
                 officer_signal=officer_signal_input,
-                notes=smart_money_notes_input
+                notes=smart_money_notes_input,
             )
+
+            institutional_holdings_for_scoring = get_active_institutional_holdings_for_scoring()
+
+            if (
+                not institutional_holdings_for_scoring.empty
+                and "ticker" in institutional_holdings_for_scoring.columns
+            ):
+                ticker_institutional_holdings = institutional_holdings_for_scoring[
+                    institutional_holdings_for_scoring["ticker"].astype(str).str.upper() == ticker
+                ]
+            else:
+                ticker_institutional_holdings = pd.DataFrame()
+
+            institutional_smart_money = build_institutional_smart_money_summary(
+                ticker_institutional_holdings,
+                ticker=ticker,
+            )
+
+            manual_smart_money_score = smart_money.get("smart_money_score", 0)
+            institutional_smart_money_score = institutional_smart_money.get(
+                "institutional_smart_money_score",
+                0,
+            )
+
+            if institutional_smart_money.get("holding_count", 0) > 0:
+                final_smart_money_score = round(
+                    (manual_smart_money_score * 0.35)
+                    + (institutional_smart_money_score * 0.65),
+                    2,
+                )
+            else:
+                final_smart_money_score = manual_smart_money_score
 
             final_score_data = calculate_final_score(
                 chart_score=chart_score,
                 fundamental_score=fundamental_score,
                 valuation_score=valuation.get("valuation_score", 0),
-                smart_money_score=smart_money.get("smart_money_score", 0)
+                smart_money_score=final_smart_money_score,
             )
+
             final_score = final_score_data["final_score"]
             final_label = get_final_label(final_score)
 
@@ -307,7 +385,7 @@ if mode == "Single Ticker":
                 final_score=final_score,
                 chart_action_label=action_label,
                 valuation_label=valuation.get("valuation_label", "N/A"),
-                profit_locker_status=metrics["profit_locker_status"]
+                profit_locker_status=metrics["profit_locker_status"],
             )
 
             # -----------------------------
@@ -319,17 +397,17 @@ if mode == "Single Ticker":
 
             s1.metric(
                 "Final Score",
-                f"{final_score}/100"
+                f"{final_score}/100",
             )
 
             s2.metric(
                 "Final Label",
-                final_label
+                final_label,
             )
 
             s3.metric(
                 "Final Action",
-                final_action
+                final_action,
             )
 
             score_breakdown = {
@@ -338,22 +416,22 @@ if mode == "Single Ticker":
                     "Fundamentals",
                     "Valuation",
                     "Smart Money",
-                    "Final Score"
+                    "Final Score",
                 ],
                 "Score": [
                     f"{chart_score}/100",
                     f"{fundamental_score}/100",
                     f"{valuation.get('valuation_score', 0)}/100",
                     f"{final_score_data['smart_money_normalized']:.0f}/100",
-                    f"{final_score}/100"
+                    f"{final_score}/100",
                 ],
                 "Weight": [
                     "30%",
                     "35%",
                     "25%",
                     "10%",
-                    "100%"
-                ]
+                    "100%",
+                ],
             }
 
             st.table(pd.DataFrame(score_breakdown))
@@ -367,27 +445,27 @@ if mode == "Single Ticker":
 
             col1.metric(
                 "Current Price",
-                f"${metrics['current_price']:,.2f}"
+                f"${metrics['current_price']:,.2f}",
             )
 
             col2.metric(
                 "150DMA",
-                f"${metrics['dma_150']:,.2f}"
+                f"${metrics['dma_150']:,.2f}",
             )
 
             col3.metric(
                 "Distance from 150DMA",
-                f"{metrics['distance_from_150dma']:.2f}%"
+                f"{metrics['distance_from_150dma']:.2f}%",
             )
 
             col4.metric(
                 "Chart Score",
-                f"{chart_score}/100"
+                f"{chart_score}/100",
             )
 
             col5.metric(
                 "Action Label",
-                action_label
+                action_label,
             )
 
             st.info(f"Heartbeat Status: {metrics['heartbeat_status']}")
@@ -395,33 +473,39 @@ if mode == "Single Ticker":
 
             fig = go.Figure()
 
-            fig.add_trace(go.Scatter(
-                x=data.index,
-                y=data["Close"],
-                mode="lines",
-                name="Close Price"
-            ))
+            fig.add_trace(
+                go.Scatter(
+                    x=data.index,
+                    y=data["Close"],
+                    mode="lines",
+                    name="Close Price",
+                )
+            )
 
-            fig.add_trace(go.Scatter(
-                x=data.index,
-                y=data["50DMA"],
-                mode="lines",
-                name="50DMA"
-            ))
+            fig.add_trace(
+                go.Scatter(
+                    x=data.index,
+                    y=data["50DMA"],
+                    mode="lines",
+                    name="50DMA",
+                )
+            )
 
-            fig.add_trace(go.Scatter(
-                x=data.index,
-                y=data["150DMA"],
-                mode="lines",
-                name="150DMA"
-            ))
+            fig.add_trace(
+                go.Scatter(
+                    x=data.index,
+                    y=data["150DMA"],
+                    mode="lines",
+                    name="150DMA",
+                )
+            )
 
             fig.update_layout(
                 title=f"{ticker} Price vs 50DMA and 150DMA",
                 xaxis_title="Date",
                 yaxis_title="Price",
                 height=650,
-                hovermode="x unified"
+                hovermode="x unified",
             )
 
             st.plotly_chart(fig, width="stretch")
@@ -442,9 +526,11 @@ if mode == "Single Ticker":
                     "Chart Action Label",
                     "Chart Score",
                     "Fundamental Score",
-                    "Valuation Score"
+                    "Valuation Score",
                     "Smart Money Score",
                     "Smart Money Label",
+                    "Institutional Smart Money Score",
+                    "Final Smart Money Used",
                 ],
                 "Result": [
                     f"{final_score}/100",
@@ -456,10 +542,12 @@ if mode == "Single Ticker":
                     action_label,
                     f"{chart_score}/100",
                     f"{fundamental_score}/100",
-                    f"{valuation.get('valuation_score', 0)}/100"
+                    f"{valuation.get('valuation_score', 0)}/100",
                     f"{smart_money.get('smart_money_score', 0)}/5",
                     smart_money.get("smart_money_label", "N/A"),
-                ]
+                    f"{institutional_smart_money.get('institutional_smart_money_score', 0)}/5",
+                    f"{final_smart_money_score}/5",
+                ],
             }
 
             st.table(pd.DataFrame(summary_data))
@@ -473,44 +561,44 @@ if mode == "Single Ticker":
 
             f1.metric(
                 "Revenue YoY Growth",
-                format_growth_percent(fundamentals.get("revenue_yoy_growth"))
+                format_growth_percent(fundamentals.get("revenue_yoy_growth")),
             )
 
             f2.metric(
                 "Gross Margin",
-                format_percent(fundamentals.get("gross_margin"))
+                format_percent(fundamentals.get("gross_margin")),
             )
 
             f3.metric(
                 "Operating Margin",
-                format_percent(fundamentals.get("operating_margin"))
+                format_percent(fundamentals.get("operating_margin")),
             )
 
             f4.metric(
                 "Fundamental Score",
-                f"{fundamental_score}/100"
+                f"{fundamental_score}/100",
             )
 
             f5, f6, f7, f8 = st.columns(4)
 
             f5.metric(
                 "FCF Margin",
-                format_percent(fundamentals.get("fcf_margin"))
+                format_percent(fundamentals.get("fcf_margin")),
             )
 
             f6.metric(
                 "Cash",
-                format_money(fundamentals.get("cash"))
+                format_money(fundamentals.get("cash")),
             )
 
             f7.metric(
                 "Debt / Equity",
-                format_number(fundamentals.get("debt_to_equity"))
+                format_number(fundamentals.get("debt_to_equity")),
             )
 
             f8.metric(
                 "Cash Runway",
-                fundamentals.get("cash_runway_label", "N/A")
+                fundamentals.get("cash_runway_label", "N/A"),
             )
 
             fundamental_table = {
@@ -530,7 +618,7 @@ if mode == "Single Ticker":
                     "Debt / Equity",
                     "Current Ratio",
                     "Cash Runway",
-                    "Fundamental Score"
+                    "Fundamental Score",
                 ],
                 "Value": [
                     format_money(fundamentals.get("revenue")),
@@ -548,8 +636,8 @@ if mode == "Single Ticker":
                     format_number(fundamentals.get("debt_to_equity")),
                     format_number(fundamentals.get("current_ratio")),
                     fundamentals.get("cash_runway_label", "N/A"),
-                    f"{fundamental_score}/100"
-                ]
+                    f"{fundamental_score}/100",
+                ],
             }
 
             st.table(pd.DataFrame(fundamental_table))
@@ -565,44 +653,44 @@ if mode == "Single Ticker":
 
             v1.metric(
                 "Primary Intrinsic Value",
-                format_money(valuation.get("primary_intrinsic_value"))
+                format_money(valuation.get("primary_intrinsic_value")),
             )
 
             v2.metric(
                 "Current Price",
-                format_money(metrics.get("current_price"))
+                format_money(metrics.get("current_price")),
             )
 
             v3.metric(
                 "Margin of Safety",
-                "N/A" if margin_of_safety is None else f"{margin_of_safety:.2f}%"
+                "N/A" if margin_of_safety is None else f"{margin_of_safety:.2f}%",
             )
 
             v4.metric(
                 "Valuation Score",
-                f"{valuation.get('valuation_score')}/100"
+                f"{valuation.get('valuation_score')}/100",
             )
 
             v5, v6, v7, v8 = st.columns(4)
 
             v5.metric(
                 "Valuation Label",
-                valuation.get("valuation_label", "N/A")
+                valuation.get("valuation_label", "N/A"),
             )
 
             v6.metric(
                 "Valuation Method",
-                valuation.get("valuation_method", "N/A")
+                valuation.get("valuation_method", "N/A"),
             )
 
             v7.metric(
                 "DCF Value",
-                format_money(valuation.get("dcf_value"))
+                format_money(valuation.get("dcf_value")),
             )
 
             v8.metric(
                 "EPS/P/E Value",
-                format_money(valuation.get("eps_pe_value"))
+                format_money(valuation.get("eps_pe_value")),
             )
 
             valuation_table = {
@@ -615,7 +703,7 @@ if mode == "Single Ticker":
                     "Valuation Method",
                     "Margin of Safety",
                     "Valuation Score",
-                    "Valuation Label"
+                    "Valuation Label",
                 ],
                 "Value": [
                     format_money(metrics.get("current_price")),
@@ -624,15 +712,17 @@ if mode == "Single Ticker":
                     format_money(valuation.get("asset_value")),
                     format_money(valuation.get("primary_intrinsic_value")),
                     valuation.get("valuation_method", "N/A"),
-                    "N/A" if valuation.get("margin_of_safety") is None else f"{valuation.get('margin_of_safety'):.2f}%",
+                    "N/A"
+                    if valuation.get("margin_of_safety") is None
+                    else f"{valuation.get('margin_of_safety'):.2f}%",
                     f"{valuation.get('valuation_score')}/100",
-                    valuation.get("valuation_label", "N/A")
-                ]
+                    valuation.get("valuation_label", "N/A"),
+                ],
             }
 
             st.table(pd.DataFrame(valuation_table))
-            
-                        # -----------------------------
+
+            # -----------------------------
             # Smart Money Map
             # -----------------------------
             st.subheader("Smart Money Map")
@@ -641,17 +731,17 @@ if mode == "Single Ticker":
 
             sm1.metric(
                 "Smart Money Score",
-                f"{smart_money.get('smart_money_score', 0)}/5"
+                f"{smart_money.get('smart_money_score', 0)}/5",
             )
 
             sm2.metric(
                 "Smart Money Label",
-                smart_money.get("smart_money_label", "N/A")
+                smart_money.get("smart_money_label", "N/A"),
             )
 
             sm3.metric(
                 "Smart Money Action",
-                smart_money.get("smart_money_action", "N/A")
+                smart_money.get("smart_money_action", "N/A"),
             )
 
             smart_money_table = {
@@ -663,7 +753,7 @@ if mode == "Single Ticker":
                     "Smart Money Score",
                     "Smart Money Label",
                     "Smart Money Action",
-                    "Notes"
+                    "Notes",
                 ],
                 "Result": [
                     smart_money.get("insider_signal", "N/A"),
@@ -673,11 +763,39 @@ if mode == "Single Ticker":
                     f"{smart_money.get('smart_money_score', 0)}/5",
                     smart_money.get("smart_money_label", "N/A"),
                     smart_money.get("smart_money_action", "N/A"),
-                    smart_money.get("notes", "")
-                ]
+                    smart_money.get("notes", ""),
+                ],
             }
 
             st.table(pd.DataFrame(smart_money_table))
+
+            st.subheader("Institutional Smart Money Score")
+
+            ism1, ism2, ism3, ism4 = st.columns(4)
+
+            ism1.metric(
+                "Institutional Score",
+                f"{institutional_smart_money.get('institutional_smart_money_score', 0)}/5",
+            )
+
+            ism2.metric(
+                "Net QoQ Flow",
+                f"{institutional_smart_money.get('net_qoq_flow_pct', 0):.2f}%",
+            )
+
+            ism3.metric(
+                "Institutions",
+                institutional_smart_money.get("institution_count", 0),
+            )
+
+            ism4.metric(
+                "Final Smart Money Used",
+                f"{final_smart_money_score}/5",
+            )
+
+            st.table(
+                build_institutional_score_table(institutional_smart_money)
+            )
 
 
 # -----------------------------
@@ -701,7 +819,7 @@ elif mode == "Watchlist Scanner":
             st.dataframe(
                 watchlist_results,
                 width="stretch",
-                hide_index=True
+                hide_index=True,
             )
 
             csv = watchlist_results.to_csv(index=False)
@@ -711,7 +829,7 @@ elif mode == "Watchlist Scanner":
                 data=csv,
                 file_name="watchlist_results.csv",
                 mime="text/csv",
-                key="download_watchlist_csv"
+                key="download_watchlist_csv",
             )
 
 
@@ -727,7 +845,7 @@ elif mode == "Score History":
         "Choose history view",
         ["Latest Scan", "Full History"],
         horizontal=True,
-        key="history_choice"
+        key="history_choice",
     )
 
     if history_choice == "Latest Scan":
@@ -741,7 +859,7 @@ elif mode == "Score History":
         st.dataframe(
             history_df,
             width="stretch",
-            hide_index=True
+            hide_index=True,
         )
 
         csv = history_df.to_csv(index=False)
@@ -751,9 +869,10 @@ elif mode == "Score History":
             data=csv,
             file_name="scan_history.csv",
             mime="text/csv",
-            key="download_scan_history_csv"
+            key="download_scan_history_csv",
         )
-        
+
+
 # -----------------------------
 # Institution Smart Money Heat Map
 # -----------------------------
@@ -903,6 +1022,10 @@ elif mode == "Institution Map":
             universe_summary["alt_manager_count"] + universe_summary["hedge_fund_count"],
         )
 
+    institutional_score_summary = build_institutional_smart_money_summary(
+        merged_holdings_df
+    )
+
     if merged_holdings_df.empty:
         st.warning("No holdings data found.")
     else:
@@ -935,7 +1058,29 @@ elif mode == "Institution Map":
             f"{holdings_summary['net_qoq_change']:.2f}%",
         )
 
-    st.markdown("---")
+        st.subheader("Institutional Smart Money Score")
+
+        score_col1, score_col2, score_col3, score_col4 = st.columns(4)
+
+        score_col1.metric(
+            "Institutional Score",
+            f"{institutional_score_summary.get('institutional_smart_money_score', 0)}/5",
+        )
+
+        score_col2.metric(
+            "Institutional Label",
+            institutional_score_summary.get("institutional_smart_money_label", "N/A"),
+        )
+
+        score_col3.metric(
+            "Accumulating",
+            institutional_score_summary.get("accumulating_count", 0),
+        )
+
+        score_col4.metric(
+            "Reducing",
+            institutional_score_summary.get("reducing_count", 0),
+        )
 
     heatmap_tabs = st.tabs(
         [
@@ -943,6 +1088,7 @@ elif mode == "Institution Map":
             "Institution → Sector",
             "Sector → Institution",
             "Holdings Table",
+            "Smart Money Score",
             "6B-6 API Connector",
         ]
     )
@@ -1120,7 +1266,52 @@ elif mode == "Institution Map":
             )
 
     with heatmap_tabs[4]:
-        st.subheader("6B-6 API Connector Status")
+        st.subheader("Institutional Smart Money Score")
+
+        st.write(
+            "This score converts institutional accumulation/reduction into a -5 to +5 Smart Money Score."
+        )
+
+        st.table(
+            build_institutional_score_table(institutional_score_summary)
+        )
+
+        flow_tables = build_top_flow_tables(merged_holdings_df)
+
+        flow_col1, flow_col2 = st.columns(2)
+
+        with flow_col1:
+            st.subheader("Top Accumulating Sectors")
+            st.dataframe(
+                flow_tables["top_accumulating_sectors"],
+                width="stretch",
+                hide_index=True,
+            )
+
+            st.subheader("Top Accumulating Institutions")
+            st.dataframe(
+                flow_tables["top_accumulating_institutions"],
+                width="stretch",
+                hide_index=True,
+            )
+
+        with flow_col2:
+            st.subheader("Top Reducing Sectors")
+            st.dataframe(
+                flow_tables["top_reducing_sectors"],
+                width="stretch",
+                hide_index=True,
+            )
+
+            st.subheader("Top Reducing Institutions")
+            st.dataframe(
+                flow_tables["top_reducing_institutions"],
+                width="stretch",
+                hide_index=True,
+            )
+
+    with heatmap_tabs[5]:
+        st.subheader("6B-6 API Connector")
 
         st.write(
             "This tab shows which connector is currently being used and whether data is actually flowing into the heat maps."
@@ -1130,22 +1321,22 @@ elif mode == "Institution Map":
 
         connector_col1.metric(
             "Current Source",
-            data_source
+            data_source,
         )
 
         connector_col2.metric(
             "Holdings Rows",
-            len(holdings_df)
+            len(holdings_df),
         )
 
         connector_col3.metric(
             "Merged Rows",
-            len(merged_holdings_df)
+            len(merged_holdings_df),
         )
 
         connector_col4.metric(
             "Institutions Matched",
-            0 if merged_holdings_df.empty else merged_holdings_df["institution"].nunique()
+            0 if merged_holdings_df.empty else merged_holdings_df["institution"].nunique(),
         )
 
         st.markdown("---")
@@ -1186,7 +1377,7 @@ elif mode == "Institution Map":
                 "position_change_qoq_pct",
                 "shares_change_qoq_pct",
                 "flow_status",
-                "report_date"
+                "report_date",
             ]
 
             available_columns = [
@@ -1196,7 +1387,7 @@ elif mode == "Institution Map":
             st.dataframe(
                 merged_holdings_df[available_columns].head(50),
                 width="stretch",
-                hide_index=True
+                hide_index=True,
             )
 
         st.markdown("### Connector Roadmap")
@@ -1216,5 +1407,5 @@ Next upgrades:
 - Add a ticker-level institutional score
 - Feed institutional flow into the Final Evaluator Score
             """,
-            language="text"
+            language="text",
         )
