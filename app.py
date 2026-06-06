@@ -24,6 +24,8 @@ from src.institutional_holdings import (
     build_sector_institution_treemap,
     prepare_holdings_table
 )
+from src.institutional_connector import build_live_institutional_holdings
+from src.sec_13f_connector import build_sec_13f_holdings
 
 
 # -----------------------------
@@ -67,6 +69,19 @@ def get_cached_institution_universe():
 @st.cache_data(ttl=3600)
 def get_cached_institution_holdings_sample():
     return load_institution_holdings_sample("data/institution_holdings_sample.csv")
+
+@st.cache_data(ttl=3600)
+def get_cached_live_institution_holdings(api_key: str, report_date: str, page_limit: int):
+    return build_live_institutional_holdings(
+        api_key=api_key,
+        report_date=report_date,
+        page_limit=page_limit,
+    )
+@st.cache_data(ttl=3600)
+def get_cached_sec_13f_holdings(manager_limit: int):
+        return build_sec_13f_holdings(
+        manager_limit=manager_limit,
+    )
 
 
 # -----------------------------
@@ -753,11 +768,107 @@ elif mode == "Institution Map":
     )
 
     institution_df = get_cached_institution_universe()
-    holdings_df = get_cached_institution_holdings_sample()
+
+    st.markdown("### Holdings Data Source")
+
+    data_source = st.selectbox(
+        "Choose holdings data source",
+        ["Sample CSV", "SEC 13F Free", "FMP Live API"],
+        key="institutional_data_source",
+    )
+
+    holdings_df = pd.DataFrame()
+
+    if data_source == "Sample CSV":
+        holdings_df = get_cached_institution_holdings_sample()
+
+    elif data_source == "SEC 13F Free":
+        st.info(
+            "SEC 13F Free mode pulls official EDGAR 13F filings, parses the XML information table, "
+            "maps CUSIPs to tickers/sectors using data/sec_13f_cusip_sector_map.csv, and feeds the same heat maps."
+        )
+
+        sec_manager_limit_input = st.number_input(
+            "Number of SEC 13F managers to scan",
+            min_value=1,
+            max_value=15,
+            value=5,
+            step=1,
+            key="sec_13f_manager_limit_input",
+        )
+
+        if st.button("Load SEC 13F Holdings", key="load_sec_13f_holdings"):
+            with st.spinner("Loading SEC 13F filings from EDGAR..."):
+                sec_df = get_cached_sec_13f_holdings(
+                    manager_limit=int(sec_manager_limit_input)
+                )
+
+                st.session_state["sec_13f_holdings_df"] = sec_df
+
+        holdings_df = st.session_state.get(
+            "sec_13f_holdings_df",
+            pd.DataFrame(),
+        )
+
+        if holdings_df.empty:
+            st.warning(
+                "No SEC 13F holdings loaded yet. Click Load SEC 13F Holdings. "
+                "If it still returns empty, you may need to expand data/sec_13f_cusip_sector_map.csv with more CUSIPs."
+            )
+
+    elif data_source == "FMP Live API":
+        try:
+            fmp_key_from_env = st.secrets.get("FMP_API_KEY", "")
+        except Exception:
+            fmp_key_from_env = ""
+
+        fmp_api_key_input = st.text_input(
+            "FMP API Key",
+            value=fmp_key_from_env,
+            type="password",
+            key="fmp_api_key_input",
+        )
+
+        fmp_report_date_input = st.text_input(
+            "13F Report Date",
+            value="2026-03-31",
+            key="fmp_report_date_input",
+        )
+
+        fmp_page_limit_input = st.number_input(
+            "FMP Pages Per Ticker",
+            min_value=1,
+            max_value=5,
+            value=1,
+            step=1,
+            key="fmp_page_limit_input",
+        )
+
+        if st.button("Load FMP Live Institutional Holdings", key="load_fmp_live_holdings"):
+            with st.spinner("Loading live institutional holdings from FMP..."):
+                live_df = get_cached_live_institution_holdings(
+                    api_key=fmp_api_key_input,
+                    report_date=fmp_report_date_input,
+                    page_limit=int(fmp_page_limit_input),
+                )
+
+                st.session_state["live_institutional_holdings_df"] = live_df
+
+        holdings_df = st.session_state.get(
+            "live_institutional_holdings_df",
+            pd.DataFrame(),
+        )
+
+        if holdings_df.empty:
+            st.warning(
+                "No live FMP institutional data loaded. Your FMP key may be valid, but the institutional ownership / 13F endpoint "
+                "may be restricted under your current subscription. Use Sample CSV for now, or upgrade to a plan that includes "
+                "institutional ownership data. The SEC 13F connector is the free official-data path."
+            )
 
     merged_holdings_df = merge_holdings_with_universe(
         holdings_df=holdings_df,
-        universe_df=institution_df
+        universe_df=institution_df,
     )
 
     if institution_df.empty:
@@ -769,31 +880,31 @@ elif mode == "Institution Map":
 
         u1.metric(
             "Institutions Tracked",
-            universe_summary["institution_count"]
+            universe_summary["institution_count"],
         )
 
         u2.metric(
             "Total Assets / AUM",
-            f"${universe_summary['total_assets_or_aum']:.2f}T"
+            f"${universe_summary['total_assets_or_aum']:.2f}T",
         )
 
         u3.metric(
             "High Trackability",
-            universe_summary["high_trackability_count"]
+            universe_summary["high_trackability_count"],
         )
 
         u4.metric(
             "Banks",
-            universe_summary["bank_count"]
+            universe_summary["bank_count"],
         )
 
         u5.metric(
             "PE / Alt / Hedge",
-            universe_summary["alt_manager_count"] + universe_summary["hedge_fund_count"]
+            universe_summary["alt_manager_count"] + universe_summary["hedge_fund_count"],
         )
 
     if merged_holdings_df.empty:
-        st.warning("No holdings sample data found. Check data/institution_holdings_sample.csv.")
+        st.warning("No holdings data found.")
     else:
         holdings_summary = build_holdings_summary(merged_holdings_df)
 
@@ -801,27 +912,27 @@ elif mode == "Institution Map":
 
         h1.metric(
             "Tracked Holding Rows",
-            holdings_summary["holding_count"]
+            holdings_summary["holding_count"],
         )
 
         h2.metric(
             "Institutions With Holdings",
-            holdings_summary["institution_count"]
+            holdings_summary["institution_count"],
         )
 
         h3.metric(
             "Sectors Tracked",
-            holdings_summary["sector_count"]
+            holdings_summary["sector_count"],
         )
 
         h4.metric(
-            "Sample Market Value",
-            f"${holdings_summary['total_market_value']:.2f}B"
+            "Market Value",
+            f"${holdings_summary['total_market_value']:.2f}B",
         )
 
         h5.metric(
             "Net QoQ Flow",
-            f"{holdings_summary['net_qoq_change']:.2f}%"
+            f"{holdings_summary['net_qoq_change']:.2f}%",
         )
 
     st.markdown("---")
@@ -832,7 +943,7 @@ elif mode == "Institution Map":
             "Institution → Sector",
             "Sector → Institution",
             "Holdings Table",
-            "6B-6 API Connector"
+            "6B-6 API Connector",
         ]
     )
 
@@ -856,21 +967,21 @@ elif mode == "Institution Map":
                 "Filter by institution type",
                 type_options,
                 default=type_options,
-                key="universe_type_filter"
+                key="universe_type_filter",
             )
 
             selected_trackability = filter_col2.multiselect(
                 "Filter by trackability",
                 trackability_options,
                 default=trackability_options,
-                key="universe_trackability_filter"
+                key="universe_trackability_filter",
             )
 
             selected_countries = filter_col3.multiselect(
                 "Filter by country",
                 country_options,
                 default=country_options,
-                key="universe_country_filter"
+                key="universe_country_filter",
             )
 
             filtered_universe_df = institution_df[
@@ -888,14 +999,14 @@ elif mode == "Institution Map":
             st.dataframe(
                 table_df,
                 width="stretch",
-                hide_index=True
+                hide_index=True,
             )
 
     with heatmap_tabs[1]:
         st.subheader("Institution → Sector Exposure")
 
         st.write(
-            "6B-3 and 6B-5: Box size = sample reported market value. "
+            "Box size = reported market value. "
             "Color = weighted QoQ position change. "
             "Hover over tiles to see top holdings, exposure %, QoQ change, and flow details."
         )
@@ -917,14 +1028,14 @@ elif mode == "Institution Map":
                 "Filter institutions",
                 institution_options,
                 default=institution_options,
-                key="institution_sector_institution_filter"
+                key="institution_sector_institution_filter",
             )
 
             selected_sectors = sector_filter_col.multiselect(
                 "Filter sectors",
                 sector_options,
                 default=sector_options,
-                key="institution_sector_sector_filter"
+                key="institution_sector_sector_filter",
             )
 
             filtered_holdings_df = merged_holdings_df[
@@ -940,7 +1051,7 @@ elif mode == "Institution Map":
         st.subheader("Sector → Institution Exposure")
 
         st.write(
-            "6B-4 and 6B-5: This view answers which sectors are attracting institutional money. "
+            "This view answers which sectors are attracting institutional money. "
             "Hover over tiles to see top holdings, sector exposure %, QoQ change, and flow details."
         )
 
@@ -961,14 +1072,14 @@ elif mode == "Institution Map":
                 "Filter sectors",
                 sector_options,
                 default=sector_options,
-                key="sector_institution_sector_filter"
+                key="sector_institution_sector_filter",
             )
 
             selected_institutions = inst_filter_col.multiselect(
                 "Filter institutions",
                 institution_options,
                 default=institution_options,
-                key="sector_institution_institution_filter"
+                key="sector_institution_institution_filter",
             )
 
             filtered_holdings_df = merged_holdings_df[
@@ -984,7 +1095,7 @@ elif mode == "Institution Map":
         st.subheader("Holdings Table")
 
         st.write(
-            "This is the sample holdings data powering the sector heat maps."
+            "This is the holdings data powering the sector heat maps."
         )
 
         if merged_holdings_df.empty:
@@ -995,7 +1106,7 @@ elif mode == "Institution Map":
             st.dataframe(
                 holdings_table,
                 width="stretch",
-                hide_index=True
+                hide_index=True,
             )
 
             csv = holdings_table.to_csv(index=False)
@@ -1003,46 +1114,107 @@ elif mode == "Institution Map":
             st.download_button(
                 label="Download Holdings Table as CSV",
                 data=csv,
-                file_name="institution_holdings_sample.csv",
+                file_name="institution_holdings.csv",
                 mime="text/csv",
-                key="download_institution_holdings_csv"
+                key="download_institution_holdings_csv",
             )
 
     with heatmap_tabs[4]:
-        st.subheader("6B-6 API Connector Roadmap")
+        st.subheader("6B-6 API Connector Status")
 
         st.write(
-            "This tab is the placeholder for replacing the sample CSV with a real FMP / SEC / 13F connector."
+            "This tab shows which connector is currently being used and whether data is actually flowing into the heat maps."
         )
+
+        connector_col1, connector_col2, connector_col3, connector_col4 = st.columns(4)
+
+        connector_col1.metric(
+            "Current Source",
+            data_source
+        )
+
+        connector_col2.metric(
+            "Holdings Rows",
+            len(holdings_df)
+        )
+
+        connector_col3.metric(
+            "Merged Rows",
+            len(merged_holdings_df)
+        )
+
+        connector_col4.metric(
+            "Institutions Matched",
+            0 if merged_holdings_df.empty else merged_holdings_df["institution"].nunique()
+        )
+
+        st.markdown("---")
+
+        if data_source == "Sample CSV":
+            st.success(
+                "Sample CSV mode is active. Data is coming from data/institution_holdings_sample.csv."
+            )
+
+        elif data_source == "SEC 13F Free":
+            st.success(
+                "SEC 13F Free mode is active. Data is being pulled from official SEC EDGAR filings, "
+                "then mapped through data/sec_13f_cusip_sector_map.csv."
+            )
+
+            st.info(
+                "If the SEC data looks too large, too small, or incomplete, the next fix is to improve the SEC parser "
+                "and expand the CUSIP-to-sector mapping file."
+            )
+
+        elif data_source == "FMP Live API":
+            st.warning(
+                "FMP Live API mode requires an FMP subscription that includes institutional ownership / 13F endpoints. "
+                "If your plan does not include it, this connector will return no holdings."
+            )
+
+        st.markdown("### Connector Output Preview")
+
+        if merged_holdings_df.empty:
+            st.warning("No connector data is currently available.")
+        else:
+            preview_columns = [
+                "institution",
+                "sector",
+                "ticker",
+                "company",
+                "market_value_billions",
+                "position_change_qoq_pct",
+                "shares_change_qoq_pct",
+                "flow_status",
+                "report_date"
+            ]
+
+            available_columns = [
+                column for column in preview_columns if column in merged_holdings_df.columns
+            ]
+
+            st.dataframe(
+                merged_holdings_df[available_columns].head(50),
+                width="stretch",
+                hide_index=True
+            )
+
+        st.markdown("### Connector Roadmap")
 
         st.code(
             """
-Next connector steps:
+Current connector flow:
 
-1. Choose data provider:
-   - FMP for easier institutional ownership API
-   - SEC 13F for official but harder raw filings
-   - Quiver / sec-api.io for packaged alternative data
+1. Sample CSV uses data/institution_holdings_sample.csv.
+2. SEC 13F Free pulls official EDGAR 13F filings and maps CUSIPs to sectors.
+3. FMP Live API requires a paid plan that includes institutional ownership / 13F endpoints.
+4. All sources are normalized into the same heat map format.
 
-2. Add API key:
-   export FMP_API_KEY="your_key_here"
-
-3. Build connector output columns:
-   institution
-   sector
-   ticker
-   company
-   market_value_billions
-   position_change_qoq_pct
-   shares_change_qoq_pct
-   flow_status
-   report_date
-
-4. Replace:
-   get_cached_institution_holdings_sample()
-
-With:
-   get_cached_live_institution_holdings()
+Next upgrades:
+- Fix SEC value scaling if market values look unrealistic
+- Add more CUSIPs to data/sec_13f_cusip_sector_map.csv
+- Add a ticker-level institutional score
+- Feed institutional flow into the Final Evaluator Score
             """,
             language="text"
         )
