@@ -75,6 +75,10 @@ from src.portfolio_rebalance import (
     get_rebalance_display_columns,
 )
 from src.thesis_generator import generate_stock_thesis, build_thesis_markdown
+from src.thesis_reports import (
+    build_batch_thesis_report,
+    build_thesis_summary_table,
+)
 
 # -----------------------------
 # Page Setup
@@ -1374,6 +1378,63 @@ elif mode == "Watchlist Scanner":
                     width="stretch",
                 )
 
+            st.markdown("---")
+            st.subheader("Watchlist Thesis Reports")
+
+            thesis_col1, thesis_col2 = st.columns(2)
+
+            max_watchlist_theses = thesis_col1.number_input(
+                "Maximum watchlist theses to include",
+                min_value=1,
+                max_value=max(1, len(filtered_scan_df)),
+                value=min(10, max(1, len(filtered_scan_df))),
+                step=1,
+                key="max_watchlist_theses",
+            )
+
+            thesis_source_choice = thesis_col2.selectbox(
+                "Watchlist thesis source",
+                ["Filtered Results", "Full Scan Results"],
+                index=0,
+                key="watchlist_thesis_source_choice",
+            )
+
+            if thesis_source_choice == "Filtered Results":
+                thesis_source_df = filtered_scan_df
+            else:
+                thesis_source_df = scan_results_df
+
+            thesis_summary_df = build_thesis_summary_table(thesis_source_df)
+
+            st.markdown("### Thesis Summary Table")
+
+            if thesis_summary_df.empty:
+                st.warning("No thesis summary data available.")
+            else:
+                st.dataframe(
+                    thesis_summary_df,
+                    width="stretch",
+                    hide_index=True,
+                )
+
+            watchlist_thesis_report = build_batch_thesis_report(
+                df=thesis_source_df,
+                report_title="Watchlist Thesis Report",
+                source_label=thesis_source_choice,
+                max_reports=int(max_watchlist_theses),
+            )
+
+            with st.expander("Preview Watchlist Thesis Report", expanded=False):
+                st.markdown(watchlist_thesis_report)
+
+            st.download_button(
+                label="Download Watchlist Thesis Report",
+                data=watchlist_thesis_report,
+                file_name="watchlist_thesis_report.md",
+                mime="text/markdown",
+                key="download_watchlist_thesis_report",
+            )
+
 
 # -----------------------------
 # Score History
@@ -2341,3 +2402,48 @@ elif mode == "Portfolio":
                     mime="text/csv",
                     key="download_portfolio_rebalance_plan_csv",
                 )
+
+            st.markdown("---")
+            st.subheader("Portfolio Thesis Reports")
+
+            max_portfolio_theses = st.number_input(
+                "Maximum portfolio theses to include",
+                min_value=1,
+                max_value=max(1, len(portfolio_dashboard_df)),
+                value=min(10, max(1, len(portfolio_dashboard_df))),
+                step=1,
+                key="max_portfolio_theses",
+            )
+
+            portfolio_thesis_summary_df = build_thesis_summary_table(
+                portfolio_dashboard_df
+            )
+
+            st.markdown("### Portfolio Thesis Summary Table")
+
+            if portfolio_thesis_summary_df.empty:
+                st.warning("No portfolio thesis summary data available.")
+            else:
+                st.dataframe(
+                    portfolio_thesis_summary_df,
+                    width="stretch",
+                    hide_index=True,
+                )
+
+            portfolio_thesis_report = build_batch_thesis_report(
+                df=portfolio_dashboard_df,
+                report_title="Portfolio Thesis Report",
+                source_label="Portfolio",
+                max_reports=int(max_portfolio_theses),
+            )
+
+            with st.expander("Preview Portfolio Thesis Report", expanded=False):
+                st.markdown(portfolio_thesis_report)
+
+            st.download_button(
+                label="Download Portfolio Thesis Report",
+                data=portfolio_thesis_report,
+                file_name="portfolio_thesis_report.md",
+                mime="text/markdown",
+                key="download_portfolio_thesis_report",
+            )
