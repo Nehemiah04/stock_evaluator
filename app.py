@@ -74,6 +74,7 @@ from src.portfolio_rebalance import (
     build_rebalance_summary,
     get_rebalance_display_columns,
 )
+from src.thesis_generator import generate_stock_thesis, build_thesis_markdown
 
 # -----------------------------
 # Page Setup
@@ -875,6 +876,36 @@ if mode == "Single Ticker":
 
             st.table(
                 build_institutional_score_table(institutional_smart_money).astype(str)
+            )
+
+            st.markdown("---")
+            st.subheader("AI-Style Thesis Generator")
+
+            thesis = generate_stock_thesis(
+                ticker=ticker,
+                metrics=metrics,
+                fundamentals=fundamentals,
+                valuation=valuation,
+                smart_money=smart_money,
+                institutional_smart_money=institutional_smart_money,
+                chart_score=chart_score,
+                fundamental_score=fundamental_score,
+                final_smart_money_score=final_smart_money_score,
+                final_score=final_score,
+                final_label=final_label,
+                final_action=final_action,
+            )
+
+            thesis_markdown = build_thesis_markdown(thesis)
+
+            st.markdown(thesis_markdown)
+
+            st.download_button(
+                label="Download Thesis as Markdown",
+                data=thesis_markdown,
+                file_name=f"{ticker}_stock_thesis.md",
+                mime="text/markdown",
+                key="download_single_ticker_thesis",
             )
 
 
