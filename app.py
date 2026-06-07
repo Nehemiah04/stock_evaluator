@@ -2081,8 +2081,8 @@ Current connector flow:
 Next upgrades:
 - Fix SEC value scaling if market values look unrealistic
 - Add more CUSIPs to data/sec_13f_cusip_sector_map.csv
-- Add a ticker-level institutional score
-- Feed institutional flow into the Final Evaluator Score
+- Expand tracked managers in data/sec_13f_managers.csv
+- Add more institution-specific aliases for live FMP matching
             """,
             language="text",
         )
