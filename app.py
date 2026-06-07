@@ -4,7 +4,8 @@ import plotly.graph_objects as go
 
 from src.price_data import load_price_data
 from src.scoring import calculate_heartbeat, calculate_chart_score, get_action_label
-from src.watchlist import evaluate_watchlist
+from src.full_evaluator import evaluate_full_watchlist, DEFAULT_VALUATION_ASSUMPTIONS
+from src.watchlist_loader import load_watchlist_tickers
 from src.database import load_scan_history, load_latest_scan
 from src.fundamentals import load_fundamentals, calculate_fundamental_score
 from src.valuation import build_valuation_summary
@@ -92,6 +93,10 @@ def get_cached_sec_13f_holdings(manager_limit: int):
     return build_sec_13f_holdings(
         manager_limit=manager_limit,
     )
+    
+@st.cache_data(ttl=3600)
+def get_cached_watchlist_tickers():
+    return load_watchlist_tickers("data/watchlist.csv")
 
 
 # -----------------------------
@@ -801,38 +806,203 @@ if mode == "Single Ticker":
 # -----------------------------
 # Watchlist Scanner
 # -----------------------------
+# -----------------------------
+# Watchlist Scanner 2.0
+# -----------------------------
 elif mode == "Watchlist Scanner":
-    st.subheader("Watchlist Scanner")
+    st.subheader("Watchlist Scanner 2.0")
 
-    st.write("This scans every ticker inside data/watchlist.csv and saves the results to data/stocks.db.")
+    st.write(
+        "This scans tickers from data/watchlist.csv using the full evaluator engine: "
+        "chart score, fundamentals, valuation, institutional smart money, and final score."
+    )
 
-    if st.button("Scan Watchlist", key="scan_watchlist_button"):
-        st.cache_data.clear()
+    watchlist_tickers = get_cached_watchlist_tickers()
 
-        watchlist_results = evaluate_watchlist("data/watchlist.csv")
+    if not watchlist_tickers:
+        st.error("No tickers found. Check data/watchlist.csv.")
+    else:
+        st.success(f"Loaded {len(watchlist_tickers)} tickers from data/watchlist.csv.")
 
-        if watchlist_results.empty:
-            st.error("No watchlist data found. Check data/watchlist.csv.")
+        with st.expander("Scanner Settings", expanded=True):
+            max_scan_count = st.number_input(
+                "Maximum tickers to scan",
+                min_value=1,
+                max_value=max(1, len(watchlist_tickers)),
+                value=min(10, len(watchlist_tickers)),
+                step=1,
+                key="watchlist_max_scan_count",
+            )
+
+            selected_scan_tickers = st.multiselect(
+                "Choose tickers to scan",
+                watchlist_tickers,
+                default=watchlist_tickers[: int(max_scan_count)],
+                key="watchlist_selected_tickers",
+            )
+
+            manual_scanner_smart_money_score = st.number_input(
+                "Manual Smart Money Score for Scanner (-5 to +5)",
+                min_value=-5.0,
+                max_value=5.0,
+                value=0.0,
+                step=0.5,
+                key="manual_scanner_smart_money_score",
+            )
+
+        with st.expander("Scanner Valuation Assumptions", expanded=False):
+            scanner_dcf_growth_rate = st.number_input(
+                "DCF FCF Growth Rate (%)",
+                min_value=-50.0,
+                max_value=100.0,
+                value=DEFAULT_VALUATION_ASSUMPTIONS["dcf_growth_rate"] * 100,
+                step=1.0,
+                key="scanner_dcf_growth_rate",
+            )
+
+            scanner_discount_rate = st.number_input(
+                "Discount Rate / Required Return (%)",
+                min_value=1.0,
+                max_value=50.0,
+                value=DEFAULT_VALUATION_ASSUMPTIONS["discount_rate"] * 100,
+                step=0.5,
+                key="scanner_discount_rate",
+            )
+
+            scanner_terminal_growth_rate = st.number_input(
+                "Terminal Growth Rate (%)",
+                min_value=0.0,
+                max_value=10.0,
+                value=DEFAULT_VALUATION_ASSUMPTIONS["terminal_growth_rate"] * 100,
+                step=0.25,
+                key="scanner_terminal_growth_rate",
+            )
+
+            scanner_dcf_years = st.number_input(
+                "DCF Projection Years",
+                min_value=1,
+                max_value=10,
+                value=int(DEFAULT_VALUATION_ASSUMPTIONS["dcf_years"]),
+                step=1,
+                key="scanner_dcf_years",
+            )
+
+            scanner_eps_growth_rate = st.number_input(
+                "EPS Growth Rate (%)",
+                min_value=-50.0,
+                max_value=100.0,
+                value=DEFAULT_VALUATION_ASSUMPTIONS["eps_growth_rate"] * 100,
+                step=1.0,
+                key="scanner_eps_growth_rate",
+            )
+
+            scanner_future_pe = st.number_input(
+                "Future P/E Multiple",
+                min_value=1.0,
+                max_value=100.0,
+                value=float(DEFAULT_VALUATION_ASSUMPTIONS["future_pe"]),
+                step=1.0,
+                key="scanner_future_pe",
+            )
+
+        scanner_valuation_assumptions = {
+            "dcf_growth_rate": scanner_dcf_growth_rate / 100,
+            "discount_rate": scanner_discount_rate / 100,
+            "terminal_growth_rate": scanner_terminal_growth_rate / 100,
+            "dcf_years": int(scanner_dcf_years),
+            "eps_growth_rate": scanner_eps_growth_rate / 100,
+            "future_pe": scanner_future_pe,
+            "eps_years": 5,
+        }
+
+        institutional_holdings_for_scanner = get_active_institutional_holdings_for_scoring()
+
+        scanner_info_col1, scanner_info_col2, scanner_info_col3 = st.columns(3)
+
+        scanner_info_col1.metric(
+            "Selected Tickers",
+            len(selected_scan_tickers),
+        )
+
+        scanner_info_col2.metric(
+            "Institutional Holding Rows Available",
+            len(institutional_holdings_for_scanner),
+        )
+
+        scanner_info_col3.metric(
+            "Manual Smart Money",
+            f"{manual_scanner_smart_money_score}/5",
+        )
+
+        if st.button("Run Full Watchlist Scan", key="run_full_watchlist_scan"):
+            if not selected_scan_tickers:
+                st.warning("Select at least one ticker to scan.")
+            else:
+                with st.spinner("Running full watchlist scan..."):
+                    scan_results_df = evaluate_full_watchlist(
+                        tickers=selected_scan_tickers,
+                        institutional_holdings_df=institutional_holdings_for_scanner,
+                        manual_smart_money_score=manual_scanner_smart_money_score,
+                        valuation_assumptions=scanner_valuation_assumptions,
+                    )
+
+                    st.session_state["full_watchlist_scan_results_df"] = scan_results_df
+
+        scan_results_df = st.session_state.get(
+            "full_watchlist_scan_results_df",
+            pd.DataFrame(),
+        )
+
+        if scan_results_df.empty:
+            st.info("Run the full watchlist scan to see ranked results.")
         else:
-            st.success("Watchlist scan complete. Results saved to data/stocks.db.")
+            st.subheader("Ranked Watchlist Results")
+
+            preferred_columns = [
+                "ticker",
+                "status",
+                "final_score",
+                "final_label",
+                "final_action",
+                "current_price",
+                "dma_150",
+                "distance_from_150dma",
+                "profit_locker_status",
+                "chart_score",
+                "fundamental_score",
+                "valuation_score",
+                "final_smart_money_score",
+                "institutional_smart_money_score",
+                "institutional_holding_count",
+                "institutional_net_qoq_flow_pct",
+                "valuation_label",
+                "margin_of_safety",
+                "heartbeat_status",
+                "error",
+            ]
+
+            available_columns = [
+                column for column in preferred_columns
+                if column in scan_results_df.columns
+            ]
+
+            display_df = scan_results_df[available_columns].copy()
 
             st.dataframe(
-                watchlist_results,
+                display_df,
                 width="stretch",
                 hide_index=True,
             )
 
-            csv = watchlist_results.to_csv(index=False)
+            csv = scan_results_df.to_csv(index=False)
 
             st.download_button(
-                label="Download Watchlist Results as CSV",
+                label="Download Full Watchlist Scan as CSV",
                 data=csv,
-                file_name="watchlist_results.csv",
+                file_name="full_watchlist_scan.csv",
                 mime="text/csv",
-                key="download_watchlist_csv",
+                key="download_full_watchlist_scan_csv",
             )
-
-
 # -----------------------------
 # Score History
 # -----------------------------
