@@ -54,6 +54,12 @@ from src.alerts import (
     build_alert_severity_chart,
     build_profit_locker_distance_chart,
 )
+from src.portfolio import (
+    load_portfolio_positions,
+    build_portfolio_dashboard,
+    build_portfolio_summary,
+    get_portfolio_display_columns,
+)
 
 # -----------------------------
 # Page Setup
@@ -131,6 +137,11 @@ def get_cached_full_scan_history():
 @st.cache_data(ttl=300)
 def get_cached_latest_full_scan():
     return load_latest_full_scan()
+
+
+@st.cache_data(ttl=3600)
+def get_cached_portfolio_positions():
+    return load_portfolio_positions("data/portfolio.csv")
 
 
 # -----------------------------
@@ -221,7 +232,13 @@ st.sidebar.header("Controls")
 
 mode = st.sidebar.radio(
     "Dashboard Mode",
-    ["Single Ticker", "Watchlist Scanner", "Score History", "Institution Map"],
+    [
+        "Single Ticker",
+        "Watchlist Scanner",
+        "Score History",
+        "Institution Map",
+        "Portfolio",
+    ],
     key="dashboard_mode",
 )
 
@@ -1958,3 +1975,174 @@ Next upgrades:
             """,
             language="text",
         )
+
+# -----------------------------
+# Portfolio Dashboard
+# -----------------------------
+elif mode == "Portfolio":
+    st.subheader("Portfolio Dashboard")
+
+    st.write(
+        "This section evaluates your current portfolio using the full stock evaluator engine."
+    )
+
+    positions_df = get_cached_portfolio_positions()
+
+    if positions_df.empty:
+        st.error("No portfolio positions found. Check data/portfolio.csv.")
+    else:
+        st.success(
+            f"Loaded {len(positions_df)} portfolio positions from data/portfolio.csv."
+        )
+
+        st.dataframe(
+            positions_df,
+            width="stretch",
+            hide_index=True,
+        )
+
+        with st.expander("Portfolio Valuation Assumptions", expanded=False):
+            portfolio_dcf_growth_rate = st.number_input(
+                "DCF FCF Growth Rate (%)",
+                min_value=-50.0,
+                max_value=100.0,
+                value=DEFAULT_VALUATION_ASSUMPTIONS["dcf_growth_rate"] * 100,
+                step=1.0,
+                key="portfolio_dcf_growth_rate",
+            )
+
+            portfolio_discount_rate = st.number_input(
+                "Discount Rate / Required Return (%)",
+                min_value=1.0,
+                max_value=50.0,
+                value=DEFAULT_VALUATION_ASSUMPTIONS["discount_rate"] * 100,
+                step=0.5,
+                key="portfolio_discount_rate",
+            )
+
+            portfolio_terminal_growth_rate = st.number_input(
+                "Terminal Growth Rate (%)",
+                min_value=0.0,
+                max_value=10.0,
+                value=DEFAULT_VALUATION_ASSUMPTIONS["terminal_growth_rate"] * 100,
+                step=0.25,
+                key="portfolio_terminal_growth_rate",
+            )
+
+            portfolio_future_pe = st.number_input(
+                "Future P/E Multiple",
+                min_value=1.0,
+                max_value=100.0,
+                value=float(DEFAULT_VALUATION_ASSUMPTIONS["future_pe"]),
+                step=1.0,
+                key="portfolio_future_pe",
+            )
+
+        portfolio_valuation_assumptions = {
+            "dcf_growth_rate": portfolio_dcf_growth_rate / 100,
+            "discount_rate": portfolio_discount_rate / 100,
+            "terminal_growth_rate": portfolio_terminal_growth_rate / 100,
+            "dcf_years": 5,
+            "eps_growth_rate": portfolio_dcf_growth_rate / 100,
+            "future_pe": portfolio_future_pe,
+            "eps_years": 5,
+        }
+
+        manual_portfolio_smart_money_score = st.number_input(
+            "Manual Smart Money Score for Portfolio (-5 to +5)",
+            min_value=-5.0,
+            max_value=5.0,
+            value=0.0,
+            step=0.5,
+            key="manual_portfolio_smart_money_score",
+        )
+
+        institutional_holdings_for_portfolio = (
+            get_active_institutional_holdings_for_scoring()
+        )
+
+        if st.button("Evaluate Portfolio", key="evaluate_portfolio_button"):
+            with st.spinner("Evaluating portfolio positions..."):
+                portfolio_tickers = positions_df["ticker"].tolist()
+
+                portfolio_evaluator_df = evaluate_full_watchlist(
+                    tickers=portfolio_tickers,
+                    institutional_holdings_df=institutional_holdings_for_portfolio,
+                    manual_smart_money_score=manual_portfolio_smart_money_score,
+                    valuation_assumptions=portfolio_valuation_assumptions,
+                )
+
+                portfolio_dashboard_df = build_portfolio_dashboard(
+                    positions_df=positions_df,
+                    evaluator_df=portfolio_evaluator_df,
+                )
+
+                st.session_state["portfolio_dashboard_df"] = portfolio_dashboard_df
+
+        portfolio_dashboard_df = st.session_state.get(
+            "portfolio_dashboard_df",
+            pd.DataFrame(),
+        )
+
+        if portfolio_dashboard_df.empty:
+            st.info(
+                "Click Evaluate Portfolio to calculate portfolio value, risk, and scores."
+            )
+        else:
+            portfolio_summary = build_portfolio_summary(portfolio_dashboard_df)
+
+            p1, p2, p3, p4, p5 = st.columns(5)
+
+            p1.metric(
+                "Holdings",
+                portfolio_summary["holding_count"],
+            )
+
+            p2.metric(
+                "Market Value",
+                format_money(portfolio_summary["total_market_value"]),
+            )
+
+            p3.metric(
+                "Cost Basis",
+                format_money(portfolio_summary["total_cost_basis"]),
+            )
+
+            p4.metric(
+                "Unrealized Gain/Loss",
+                format_money(portfolio_summary["total_unrealized_gain_loss"]),
+                delta=f"{portfolio_summary['total_unrealized_gain_loss_pct']:.2f}%",
+            )
+
+            p5.metric(
+                "Weighted Final Score",
+                f"{portfolio_summary['weighted_final_score']:.0f}/100",
+            )
+
+            st.warning(
+                f"Profit Locker / caution positions: {portfolio_summary['profit_locker_count']}"
+            )
+
+            display_columns = [
+                column
+                for column in get_portfolio_display_columns()
+                if column in portfolio_dashboard_df.columns
+            ]
+
+            st.subheader("Portfolio Holdings Evaluation")
+
+            st.dataframe(
+                portfolio_dashboard_df[display_columns],
+                width="stretch",
+                hide_index=True,
+            )
+
+            csv = portfolio_dashboard_df.to_csv(index=False)
+
+            st.download_button(
+                label="Download Portfolio Evaluation as CSV",
+                data=csv,
+                file_name="portfolio_evaluation.csv",
+                mime="text/csv",
+                key="download_portfolio_evaluation_csv",
+            )
