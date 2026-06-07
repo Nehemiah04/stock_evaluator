@@ -60,6 +60,20 @@ from src.portfolio import (
     build_portfolio_summary,
     get_portfolio_display_columns,
 )
+from src.portfolio_visuals import (
+    build_portfolio_allocation_pie,
+    build_portfolio_value_bar,
+    build_portfolio_gain_loss_chart,
+    build_portfolio_score_weight_scatter,
+    build_portfolio_profit_locker_table,
+    build_portfolio_risk_summary,
+)
+from src.portfolio_rebalance import (
+    load_portfolio_targets,
+    build_rebalance_plan,
+    build_rebalance_summary,
+    get_rebalance_display_columns,
+)
 
 # -----------------------------
 # Page Setup
@@ -142,6 +156,11 @@ def get_cached_latest_full_scan():
 @st.cache_data(ttl=3600)
 def get_cached_portfolio_positions():
     return load_portfolio_positions("data/portfolio.csv")
+
+
+@st.cache_data(ttl=3600)
+def get_cached_portfolio_targets():
+    return load_portfolio_targets("data/portfolio_targets.csv")
 
 
 # -----------------------------
@@ -2146,3 +2165,148 @@ elif mode == "Portfolio":
                 mime="text/csv",
                 key="download_portfolio_evaluation_csv",
             )
+            st.markdown("---")
+            st.subheader("Portfolio Visual Dashboard")
+
+            portfolio_risk_summary = build_portfolio_risk_summary(
+                portfolio_dashboard_df
+            )
+
+            risk_col1, risk_col2, risk_col3, risk_col4 = st.columns(4)
+
+            risk_col1.metric(
+                "Highest Weight Holding",
+                portfolio_risk_summary["highest_weight_ticker"],
+                delta=f"{portfolio_risk_summary['highest_weight_pct']:.2f}%",
+            )
+
+            risk_col2.metric(
+                "Lowest Score Holding",
+                portfolio_risk_summary["lowest_score_ticker"],
+                delta=f"{portfolio_risk_summary['lowest_score']:.0f}/100",
+            )
+
+            risk_col3.metric(
+                "Profit Locker Positions",
+                portfolio_risk_summary["profit_locker_positions"],
+            )
+
+            risk_col4.metric(
+                "Below 150DMA Positions",
+                portfolio_risk_summary["below_150dma_positions"],
+            )
+
+            portfolio_visual_tabs = st.tabs(
+                [
+                    "Allocation",
+                    "Value vs Cost",
+                    "Gain/Loss",
+                    "Score vs Weight",
+                    "Profit Locker Table",
+                ]
+            )
+
+            with portfolio_visual_tabs[0]:
+                st.plotly_chart(
+                    build_portfolio_allocation_pie(portfolio_dashboard_df),
+                    width="stretch",
+                )
+
+            with portfolio_visual_tabs[1]:
+                st.plotly_chart(
+                    build_portfolio_value_bar(portfolio_dashboard_df),
+                    width="stretch",
+                )
+
+            with portfolio_visual_tabs[2]:
+                st.plotly_chart(
+                    build_portfolio_gain_loss_chart(portfolio_dashboard_df),
+                    width="stretch",
+                )
+
+            with portfolio_visual_tabs[3]:
+                st.plotly_chart(
+                    build_portfolio_score_weight_scatter(portfolio_dashboard_df),
+                    width="stretch",
+                )
+
+            with portfolio_visual_tabs[4]:
+                profit_locker_table = build_portfolio_profit_locker_table(
+                    portfolio_dashboard_df
+                )
+
+                if profit_locker_table.empty:
+                    st.success(
+                        "No portfolio holdings are currently in the Profit Locker / caution zone."
+                    )
+                else:
+                    st.warning(
+                        "These holdings may need trimming, review, or tighter risk management."
+                    )
+
+                    st.dataframe(
+                        profit_locker_table,
+                        width="stretch",
+                        hide_index=True,
+                    )
+
+            st.markdown("---")
+            st.subheader("Portfolio Rebalance Plan")
+
+            targets_df = get_cached_portfolio_targets()
+
+            if targets_df.empty:
+                st.warning(
+                    "No target allocation file found. Check data/portfolio_targets.csv."
+                )
+            else:
+                rebalance_df = build_rebalance_plan(
+                    portfolio_df=portfolio_dashboard_df,
+                    targets_df=targets_df,
+                )
+
+                rebalance_summary = build_rebalance_summary(rebalance_df)
+
+                rb1, rb2, rb3, rb4 = st.columns(4)
+
+                rb1.metric(
+                    "Add Candidates",
+                    rebalance_summary["add_candidates"],
+                )
+
+                rb2.metric(
+                    "Trim Candidates",
+                    rebalance_summary["trim_candidates"],
+                )
+
+                rb3.metric(
+                    "Profit Locker Candidates",
+                    rebalance_summary["profit_locker_candidates"],
+                )
+
+                rb4.metric(
+                    "Review Candidates",
+                    rebalance_summary["review_candidates"],
+                )
+
+                display_columns = [
+                    column
+                    for column in get_rebalance_display_columns()
+                    if column in rebalance_df.columns
+                ]
+
+                st.dataframe(
+                    rebalance_df[display_columns],
+                    width="stretch",
+                    hide_index=True,
+                )
+
+                rebalance_csv = rebalance_df.to_csv(index=False)
+
+                st.download_button(
+                    label="Download Rebalance Plan as CSV",
+                    data=rebalance_csv,
+                    file_name="portfolio_rebalance_plan.csv",
+                    mime="text/csv",
+                    key="download_portfolio_rebalance_plan_csv",
+                )

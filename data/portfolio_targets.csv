@@ -1,0 +1,7 @@
+ticker,target_weight_pct,max_weight_pct,min_score_required,notes
+NVDA,25,35,70,AI infrastructure core
+MSFT,25,35,70,Platform/cloud core
+AVGO,20,30,70,AI networking/custom silicon
+AAPL,10,20,65,Quality compounder
+GOOGL,10,20,65,Search/AI platform
+CASH,10,25,0,Dry powder
