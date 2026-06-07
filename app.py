@@ -48,6 +48,12 @@ from src.watchlist_visuals import (
     build_150dma_risk_scatter,
     build_institutional_flow_chart,
 )
+from src.alerts import (
+    build_watchlist_alerts,
+    build_alert_summary,
+    build_alert_severity_chart,
+    build_profit_locker_distance_chart,
+)
 
 # -----------------------------
 # Page Setup
@@ -1226,6 +1232,78 @@ elif mode == "Watchlist Scanner":
             with chart_tab4:
                 st.plotly_chart(
                     build_institutional_flow_chart(filtered_scan_df),
+                    width="stretch",
+                )
+            st.markdown("---")
+            st.subheader("Profit Locker + Alert Dashboard")
+
+            alert_df = build_watchlist_alerts(filtered_scan_df)
+            alert_summary = build_alert_summary(alert_df)
+
+            alert_col1, alert_col2, alert_col3, alert_col4, alert_col5 = st.columns(5)
+
+            alert_col1.metric(
+                "Total Alerts",
+                alert_summary["total_alerts"],
+            )
+
+            alert_col2.metric(
+                "Critical",
+                alert_summary["critical_alerts"],
+            )
+
+            alert_col3.metric(
+                "Warnings",
+                alert_summary["warning_alerts"],
+            )
+
+            alert_col4.metric(
+                "Cautions",
+                alert_summary["caution_alerts"],
+            )
+
+            alert_col5.metric(
+                "Positive Setups",
+                alert_summary["positive_alerts"],
+            )
+
+            alert_tabs = st.tabs(
+                [
+                    "Alert Table",
+                    "Alert Severity Chart",
+                    "Profit Locker Distance",
+                ]
+            )
+
+            with alert_tabs[0]:
+                if alert_df.empty:
+                    st.success("No alerts triggered under the current filters.")
+                else:
+                    st.dataframe(
+                        alert_df,
+                        width="stretch",
+                        hide_index=True,
+                    )
+
+                    alert_csv = alert_df.to_csv(index=False)
+
+                    st.download_button(
+                        label="Download Alert Table as CSV",
+                        data=alert_csv,
+                        file_name="watchlist_alerts.csv",
+                        mime="text/csv",
+                        key="download_watchlist_alerts_csv",
+                    )
+
+            with alert_tabs[1]:
+                st.plotly_chart(
+                    build_alert_severity_chart(alert_df),
+                    width="stretch",
+                )
+
+            with alert_tabs[2]:
+                st.plotly_chart(
+                    build_profit_locker_distance_chart(filtered_scan_df),
                     width="stretch",
                 )
 
