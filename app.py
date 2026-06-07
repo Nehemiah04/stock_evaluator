@@ -74,11 +74,12 @@ from src.portfolio_rebalance import (
     build_rebalance_summary,
     get_rebalance_display_columns,
 )
-from src.thesis_generator import generate_stock_thesis, build_thesis_markdown
+from src.thesis_generator import generate_stock_thesis, build_thesis_content
 from src.thesis_reports import (
     build_batch_thesis_report,
     build_thesis_summary_table,
 )
+from src.notion_exporter import publish_to_notion_workspace, NotionExportError
 
 # -----------------------------
 # Page Setup
@@ -271,6 +272,63 @@ st.sidebar.write("Core rules:")
 st.sidebar.write("150DMA = heartbeat")
 st.sidebar.write("25%+ above 150DMA = caution")
 st.sidebar.write("35%+ above 150DMA = profit locker")
+
+with st.sidebar.expander("Notion Export", expanded=False):
+    notion_destination_type = st.selectbox(
+        "Destination type",
+        ["Page", "Database"],
+        index=0,
+        key="notion_destination_type",
+    )
+
+    notion_destination_id = st.text_input(
+        "Notion page or database ID",
+        value="",
+        key="notion_destination_id",
+    )
+
+    notion_token_input = st.text_input(
+        "Notion integration token",
+        value="",
+        type="password",
+        key="notion_token_input",
+    )
+
+    st.caption("Share the destination with your Notion integration before sending.")
+
+
+def send_research_to_notion(
+    title: str,
+    content: str,
+    source: str,
+    ticker: str = "",
+    tags: str = "",
+):
+    try:
+        result = publish_to_notion_workspace(
+            title=title,
+            content=content,
+            source=source,
+            ticker=ticker,
+            tags=tags,
+            token=notion_token_input,
+            destination_id=notion_destination_id,
+            destination_type=notion_destination_type,
+        )
+    except NotionExportError as error:
+        st.error(f"Could not send to Notion: {error}")
+        return
+    except Exception as error:
+        st.error(f"Could not send to Notion: {error}")
+        return
+
+    notion_url = result.get("url")
+
+    if notion_url:
+        st.success("Sent to Notion.")
+        st.markdown(f"[Open in Notion]({notion_url})")
+    else:
+        st.success("Sent to Notion.")
 
 
 # -----------------------------
@@ -900,17 +958,18 @@ if mode == "Single Ticker":
                 final_action=final_action,
             )
 
-            thesis_markdown = build_thesis_markdown(thesis)
+            thesis_content = build_thesis_content(thesis)
 
-            st.markdown(thesis_markdown)
+            st.markdown(thesis_content)
 
-            st.download_button(
-                label="Download Thesis as Markdown",
-                data=thesis_markdown,
-                file_name=f"{ticker}_stock_thesis.md",
-                mime="text/markdown",
-                key="download_single_ticker_thesis",
-            )
+            if st.button("Send Thesis to Notion", key="send_single_ticker_thesis"):
+                send_research_to_notion(
+                    title=f"{ticker} Stock Thesis",
+                    content=thesis_content,
+                    source="Single Ticker",
+                    ticker=ticker,
+                    tags="single_ticker,thesis",
+                )
 
 
 # -----------------------------
@@ -1427,13 +1486,17 @@ elif mode == "Watchlist Scanner":
             with st.expander("Preview Watchlist Thesis Report", expanded=False):
                 st.markdown(watchlist_thesis_report)
 
-            st.download_button(
-                label="Download Watchlist Thesis Report",
-                data=watchlist_thesis_report,
-                file_name="watchlist_thesis_report.md",
-                mime="text/markdown",
-                key="download_watchlist_thesis_report",
-            )
+            if st.button(
+                "Send Watchlist Thesis Report to Notion",
+                key="send_watchlist_thesis_report",
+            ):
+                send_research_to_notion(
+                    title="Watchlist Thesis Report",
+                    content=watchlist_thesis_report,
+                    source="Watchlist",
+                    ticker="MULTI",
+                    tags="watchlist,thesis,batch_report",
+                )
 
 
 # -----------------------------
@@ -2440,10 +2503,14 @@ elif mode == "Portfolio":
             with st.expander("Preview Portfolio Thesis Report", expanded=False):
                 st.markdown(portfolio_thesis_report)
 
-            st.download_button(
-                label="Download Portfolio Thesis Report",
-                data=portfolio_thesis_report,
-                file_name="portfolio_thesis_report.md",
-                mime="text/markdown",
-                key="download_portfolio_thesis_report",
-            )
+            if st.button(
+                "Send Portfolio Thesis Report to Notion",
+                key="send_portfolio_thesis_report",
+            ):
+                send_research_to_notion(
+                    title="Portfolio Thesis Report",
+                    content=portfolio_thesis_report,
+                    source="Portfolio",
+                    ticker="PORTFOLIO",
+                    tags="portfolio,thesis,batch_report",
+                )

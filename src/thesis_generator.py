@@ -267,7 +267,7 @@ def generate_stock_thesis(
     }
 
 
-def build_thesis_markdown(thesis: dict) -> str:
+def build_thesis_content(thesis: dict) -> str:
     ticker = thesis.get("ticker", "N/A")
 
     bull_case = "\n".join([f"- {point}" for point in thesis.get("bull_case", [])])
