@@ -81,6 +81,13 @@ from src.thesis_reports import (
 )
 from src.notion_exporter import publish_to_notion_workspace, NotionExportError
 from src.monitor import build_latest_monitor_report, get_monitor_display_columns
+from src.monitor_visuals import (
+    build_monitor_status_chart,
+    build_score_change_chart,
+    build_150dma_change_scatter,
+    build_profit_locker_change_table,
+    build_top_monitor_movers_table,
+)
 
 # -----------------------------
 # Page Setup
@@ -2646,6 +2653,65 @@ elif mode == "Daily Monitor":
             mime="text/csv",
             key="download_daily_monitor_report_csv",
         )
+
+        st.markdown("---")
+        st.subheader("Daily Monitor Visual Dashboard")
+
+        monitor_visual_tabs = st.tabs(
+            [
+                "Status Breakdown",
+                "Score Changes",
+                "150DMA Movement",
+                "Profit Locker Changes",
+                "Top Movers",
+            ]
+        )
+
+        with monitor_visual_tabs[0]:
+            st.plotly_chart(
+                build_monitor_status_chart(filtered_monitor_df),
+                width="stretch",
+            )
+
+        with monitor_visual_tabs[1]:
+            st.plotly_chart(
+                build_score_change_chart(filtered_monitor_df),
+                width="stretch",
+            )
+
+        with monitor_visual_tabs[2]:
+            st.plotly_chart(
+                build_150dma_change_scatter(filtered_monitor_df),
+                width="stretch",
+            )
+
+        with monitor_visual_tabs[3]:
+            profit_locker_change_table = build_profit_locker_change_table(
+                filtered_monitor_df
+            )
+
+            if profit_locker_change_table.empty:
+                st.success("No new Profit Locker or caution-zone changes found.")
+            else:
+                st.warning("Profit Locker / caution-zone changes detected.")
+
+                st.dataframe(
+                    profit_locker_change_table,
+                    width="stretch",
+                    hide_index=True,
+                )
+
+        with monitor_visual_tabs[4]:
+            top_movers_table = build_top_monitor_movers_table(filtered_monitor_df)
+
+            if top_movers_table.empty:
+                st.info("No top mover data available.")
+            else:
+                st.dataframe(
+                    top_movers_table,
+                    width="stretch",
+                    hide_index=True,
+                )
 
         st.markdown("### Alert Summary")
 
