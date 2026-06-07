@@ -19,10 +19,7 @@ def load_watchlist_tickers(file_path: str = "data/watchlist.csv") -> list:
     if df.empty:
         return []
 
-    lower_columns = {
-        column.lower().strip(): column
-        for column in df.columns
-    }
+    lower_columns = {column.lower().strip(): column for column in df.columns}
 
     if "ticker" in lower_columns:
         ticker_column = lower_columns["ticker"]
@@ -31,14 +28,7 @@ def load_watchlist_tickers(file_path: str = "data/watchlist.csv") -> list:
     else:
         ticker_column = df.columns[0]
 
-    tickers = (
-        df[ticker_column]
-        .dropna()
-        .astype(str)
-        .str.upper()
-        .str.strip()
-        .tolist()
-    )
+    tickers = df[ticker_column].dropna().astype(str).str.upper().str.strip().tolist()
 
     clean_tickers = []
 

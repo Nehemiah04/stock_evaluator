@@ -32,7 +32,22 @@ from src.institutional_scoring import (
     build_institutional_score_table,
     build_top_flow_tables,
 )
-
+from src.full_scan_database import (
+    save_full_scan_results,
+    load_full_scan_history,
+    load_latest_full_scan,
+)
+from src.watchlist_filters import (
+    apply_watchlist_filters,
+    sort_watchlist_results,
+    get_watchlist_display_columns,
+)
+from src.watchlist_visuals import (
+    build_top_final_score_chart,
+    build_score_breakdown_chart,
+    build_150dma_risk_scatter,
+    build_institutional_flow_chart,
+)
 
 # -----------------------------
 # Page Setup
@@ -80,7 +95,9 @@ def get_cached_institution_holdings_sample():
 
 
 @st.cache_data(ttl=3600)
-def get_cached_live_institution_holdings(api_key: str, report_date: str, page_limit: int):
+def get_cached_live_institution_holdings(
+    api_key: str, report_date: str, page_limit: int
+):
     return build_live_institutional_holdings(
         api_key=api_key,
         report_date=report_date,
@@ -93,10 +110,21 @@ def get_cached_sec_13f_holdings(manager_limit: int):
     return build_sec_13f_holdings(
         manager_limit=manager_limit,
     )
-    
+
+
 @st.cache_data(ttl=3600)
 def get_cached_watchlist_tickers():
     return load_watchlist_tickers("data/watchlist.csv")
+
+
+@st.cache_data(ttl=300)
+def get_cached_full_scan_history():
+    return load_full_scan_history(limit=1000)
+
+
+@st.cache_data(ttl=300)
+def get_cached_latest_full_scan():
+    return load_latest_full_scan()
 
 
 # -----------------------------
@@ -344,14 +372,17 @@ if mode == "Single Ticker":
                 notes=smart_money_notes_input,
             )
 
-            institutional_holdings_for_scoring = get_active_institutional_holdings_for_scoring()
+            institutional_holdings_for_scoring = (
+                get_active_institutional_holdings_for_scoring()
+            )
 
             if (
                 not institutional_holdings_for_scoring.empty
                 and "ticker" in institutional_holdings_for_scoring.columns
             ):
                 ticker_institutional_holdings = institutional_holdings_for_scoring[
-                    institutional_holdings_for_scoring["ticker"].astype(str).str.upper() == ticker
+                    institutional_holdings_for_scoring["ticker"].astype(str).str.upper()
+                    == ticker
                 ]
             else:
                 ticker_institutional_holdings = pd.DataFrame()
@@ -439,7 +470,7 @@ if mode == "Single Ticker":
                 ],
             }
 
-            st.table(pd.DataFrame(score_breakdown))
+            st.table(pd.DataFrame(score_breakdown).astype(str))
 
             # -----------------------------
             # Chart Heartbeat
@@ -555,7 +586,7 @@ if mode == "Single Ticker":
                 ],
             }
 
-            st.table(pd.DataFrame(summary_data))
+            st.table(pd.DataFrame(summary_data).astype(str))
 
             # -----------------------------
             # Fundamentals
@@ -645,7 +676,7 @@ if mode == "Single Ticker":
                 ],
             }
 
-            st.table(pd.DataFrame(fundamental_table))
+            st.table(pd.DataFrame(fundamental_table).astype(str))
 
             # -----------------------------
             # Valuation
@@ -717,15 +748,17 @@ if mode == "Single Ticker":
                     format_money(valuation.get("asset_value")),
                     format_money(valuation.get("primary_intrinsic_value")),
                     valuation.get("valuation_method", "N/A"),
-                    "N/A"
-                    if valuation.get("margin_of_safety") is None
-                    else f"{valuation.get('margin_of_safety'):.2f}%",
+                    (
+                        "N/A"
+                        if valuation.get("margin_of_safety") is None
+                        else f"{valuation.get('margin_of_safety'):.2f}%"
+                    ),
                     f"{valuation.get('valuation_score')}/100",
                     valuation.get("valuation_label", "N/A"),
                 ],
             }
 
-            st.table(pd.DataFrame(valuation_table))
+            st.table(pd.DataFrame(valuation_table).astype(str))
 
             # -----------------------------
             # Smart Money Map
@@ -772,7 +805,7 @@ if mode == "Single Ticker":
                 ],
             }
 
-            st.table(pd.DataFrame(smart_money_table))
+            st.table(pd.DataFrame(smart_money_table).astype(str))
 
             st.subheader("Institutional Smart Money Score")
 
@@ -799,13 +832,10 @@ if mode == "Single Ticker":
             )
 
             st.table(
-                build_institutional_score_table(institutional_smart_money)
+                build_institutional_score_table(institutional_smart_money).astype(str)
             )
 
 
-# -----------------------------
-# Watchlist Scanner
-# -----------------------------
 # -----------------------------
 # Watchlist Scanner 2.0
 # -----------------------------
@@ -915,7 +945,9 @@ elif mode == "Watchlist Scanner":
             "eps_years": 5,
         }
 
-        institutional_holdings_for_scanner = get_active_institutional_holdings_for_scoring()
+        institutional_holdings_for_scanner = (
+            get_active_institutional_holdings_for_scoring()
+        )
 
         scanner_info_col1, scanner_info_col2, scanner_info_col3 = st.columns(3)
 
@@ -946,7 +978,12 @@ elif mode == "Watchlist Scanner":
                         valuation_assumptions=scanner_valuation_assumptions,
                     )
 
+                    saved_count = save_full_scan_results(scan_results_df)
+
                     st.session_state["full_watchlist_scan_results_df"] = scan_results_df
+                    st.session_state["full_watchlist_saved_count"] = saved_count
+
+                    st.cache_data.clear()
 
         scan_results_df = st.session_state.get(
             "full_watchlist_scan_results_df",
@@ -958,89 +995,349 @@ elif mode == "Watchlist Scanner":
         else:
             st.subheader("Ranked Watchlist Results")
 
-            preferred_columns = [
-                "ticker",
-                "status",
-                "final_score",
-                "final_label",
-                "final_action",
-                "current_price",
-                "dma_150",
-                "distance_from_150dma",
-                "profit_locker_status",
-                "chart_score",
-                "fundamental_score",
-                "valuation_score",
-                "final_smart_money_score",
-                "institutional_smart_money_score",
-                "institutional_holding_count",
-                "institutional_net_qoq_flow_pct",
-                "valuation_label",
-                "margin_of_safety",
-                "heartbeat_status",
-                "error",
-            ]
+            saved_count = st.session_state.get("full_watchlist_saved_count", 0)
 
-            available_columns = [
-                column for column in preferred_columns
-                if column in scan_results_df.columns
-            ]
+            if saved_count:
+                st.success(f"Saved {saved_count} full scan rows to data/stocks.db.")
 
-            display_df = scan_results_df[available_columns].copy()
+            st.markdown("### Scanner Filters")
 
-            st.dataframe(
-                display_df,
-                width="stretch",
-                hide_index=True,
+            filter_col1, filter_col2, filter_col3 = st.columns(3)
+
+            min_final_score_filter = filter_col1.slider(
+                "Minimum Final Score",
+                min_value=0,
+                max_value=100,
+                value=0,
+                step=5,
+                key="filter_min_final_score",
             )
 
-            csv = scan_results_df.to_csv(index=False)
+            min_chart_score_filter = filter_col2.slider(
+                "Minimum Chart Score",
+                min_value=0,
+                max_value=100,
+                value=0,
+                step=5,
+                key="filter_min_chart_score",
+            )
+
+            min_fundamental_score_filter = filter_col3.slider(
+                "Minimum Fundamental Score",
+                min_value=0,
+                max_value=100,
+                value=0,
+                step=5,
+                key="filter_min_fundamental_score",
+            )
+
+            filter_col4, filter_col5, filter_col6 = st.columns(3)
+
+            min_valuation_score_filter = filter_col4.slider(
+                "Minimum Valuation Score",
+                min_value=0,
+                max_value=100,
+                value=0,
+                step=5,
+                key="filter_min_valuation_score",
+            )
+
+            min_institutional_score_filter = filter_col5.slider(
+                "Minimum Institutional Score",
+                min_value=-5.0,
+                max_value=5.0,
+                value=-5.0,
+                step=0.5,
+                key="filter_min_institutional_score",
+            )
+
+            sort_option = filter_col6.selectbox(
+                "Sort Results By",
+                [
+                    "Final Score",
+                    "Chart Score",
+                    "Fundamental Score",
+                    "Valuation Score",
+                    "Smart Money Score",
+                    "Institutional Score",
+                    "Institutional Flow",
+                    "Margin of Safety",
+                    "Distance From 150DMA",
+                ],
+                index=0,
+                key="watchlist_sort_option",
+            )
+
+            toggle_col1, toggle_col2, toggle_col3, toggle_col4, toggle_col5 = (
+                st.columns(5)
+            )
+
+            require_ok_status_filter = toggle_col1.checkbox(
+                "Only OK rows",
+                value=True,
+                key="filter_require_ok_status",
+            )
+
+            require_above_150dma_filter = toggle_col2.checkbox(
+                "Above 150DMA only",
+                value=False,
+                key="filter_above_150dma",
+            )
+
+            hide_profit_locker_filter = toggle_col3.checkbox(
+                "Hide Profit Locker warnings",
+                value=False,
+                key="filter_hide_profit_locker",
+            )
+
+            require_positive_margin_filter = toggle_col4.checkbox(
+                "Positive Margin of Safety",
+                value=False,
+                key="filter_positive_margin",
+            )
+
+            require_institutional_accumulation_filter = toggle_col5.checkbox(
+                "Institutional accumulation",
+                value=False,
+                key="filter_institutional_accumulation",
+            )
+
+            ascending_sort = st.checkbox(
+                "Sort ascending instead of descending",
+                value=False,
+                key="watchlist_sort_ascending",
+            )
+
+            filtered_scan_df = apply_watchlist_filters(
+                scan_results_df,
+                min_final_score=min_final_score_filter,
+                min_chart_score=min_chart_score_filter,
+                min_fundamental_score=min_fundamental_score_filter,
+                min_valuation_score=min_valuation_score_filter,
+                min_institutional_score=min_institutional_score_filter,
+                require_ok_status=require_ok_status_filter,
+                require_above_150dma=require_above_150dma_filter,
+                hide_profit_locker_warning=hide_profit_locker_filter,
+                require_positive_margin_of_safety=require_positive_margin_filter,
+                require_institutional_accumulation=require_institutional_accumulation_filter,
+            )
+
+            filtered_scan_df = sort_watchlist_results(
+                filtered_scan_df,
+                sort_option=sort_option,
+                ascending=ascending_sort,
+            )
+
+            result_metric_col1, result_metric_col2, result_metric_col3 = st.columns(3)
+
+            result_metric_col1.metric(
+                "Total Scan Rows",
+                len(scan_results_df),
+            )
+
+            result_metric_col2.metric(
+                "Filtered Rows",
+                len(filtered_scan_df),
+            )
+
+            if not filtered_scan_df.empty and "final_score" in filtered_scan_df.columns:
+                top_score = pd.to_numeric(
+                    filtered_scan_df["final_score"],
+                    errors="coerce",
+                ).max()
+            else:
+                top_score = 0
+
+            result_metric_col3.metric(
+                "Top Final Score",
+                f"{top_score:.0f}",
+            )
+
+            preferred_columns = get_watchlist_display_columns()
+
+            available_columns = [
+                column
+                for column in preferred_columns
+                if column in filtered_scan_df.columns
+            ]
+
+            display_df = filtered_scan_df[available_columns].copy()
+
+            st.markdown("### Top Ideas Table")
+
+            if display_df.empty:
+                st.warning("No stocks match the current filters.")
+            else:
+                st.dataframe(
+                    display_df,
+                    width="stretch",
+                    hide_index=True,
+                )
+
+            filtered_csv = filtered_scan_df.to_csv(index=False)
+
+            st.download_button(
+                label="Download Filtered Results as CSV",
+                data=filtered_csv,
+                file_name="filtered_watchlist_results.csv",
+                mime="text/csv",
+                key="download_filtered_watchlist_results_csv",
+            )
+
+            full_csv = scan_results_df.to_csv(index=False)
 
             st.download_button(
                 label="Download Full Watchlist Scan as CSV",
-                data=csv,
+                data=full_csv,
                 file_name="full_watchlist_scan.csv",
                 mime="text/csv",
                 key="download_full_watchlist_scan_csv",
             )
+            st.markdown("---")
+            st.subheader("Watchlist Visual Dashboard")
+
+            chart_tab1, chart_tab2, chart_tab3, chart_tab4 = st.tabs(
+                [
+                    "Top Final Scores",
+                    "Score Breakdown",
+                    "150DMA Risk Map",
+                    "Institutional Flow",
+                ]
+            )
+
+            with chart_tab1:
+                st.plotly_chart(
+                    build_top_final_score_chart(filtered_scan_df),
+                    width="stretch",
+                )
+
+            with chart_tab2:
+                st.plotly_chart(
+                    build_score_breakdown_chart(filtered_scan_df),
+                    width="stretch",
+                )
+
+            with chart_tab3:
+                st.plotly_chart(
+                    build_150dma_risk_scatter(filtered_scan_df),
+                    width="stretch",
+                )
+
+            with chart_tab4:
+                st.plotly_chart(
+                    build_institutional_flow_chart(filtered_scan_df),
+                    width="stretch",
+                )
+
+
+# -----------------------------
+# Score History
+# -----------------------------
 # -----------------------------
 # Score History
 # -----------------------------
 elif mode == "Score History":
     st.subheader("Score History")
 
-    st.write("This shows previous watchlist scans saved inside data/stocks.db.")
-
-    history_choice = st.radio(
-        "Choose history view",
-        ["Latest Scan", "Full History"],
-        horizontal=True,
-        key="history_choice",
+    st.write(
+        "This page shows both the older watchlist scan history and the newer Full Evaluator scan history."
     )
 
-    if history_choice == "Latest Scan":
-        history_df = get_cached_latest_scan()
-    else:
-        history_df = get_cached_scan_history()
+    history_tabs = st.tabs(
+        [
+            "Full Evaluator Latest Scan",
+            "Full Evaluator History",
+            "Legacy Scanner History",
+        ]
+    )
 
-    if history_df.empty:
-        st.warning("No scan history found yet. Run the Watchlist Scanner first.")
-    else:
-        st.dataframe(
-            history_df,
-            width="stretch",
-            hide_index=True,
+    with history_tabs[0]:
+        st.subheader("Latest Full Evaluator Scan")
+
+        latest_full_scan_df = get_cached_latest_full_scan()
+
+        if latest_full_scan_df.empty:
+            st.warning(
+                "No full evaluator scan history found yet. Run Watchlist Scanner 2.0 first."
+            )
+        else:
+            st.dataframe(
+                latest_full_scan_df,
+                width="stretch",
+                hide_index=True,
+            )
+
+            csv = latest_full_scan_df.to_csv(index=False)
+
+            st.download_button(
+                label="Download Latest Full Evaluator Scan as CSV",
+                data=csv,
+                file_name="latest_full_evaluator_scan.csv",
+                mime="text/csv",
+                key="download_latest_full_evaluator_scan_csv",
+            )
+
+    with history_tabs[1]:
+        st.subheader("Full Evaluator Scan History")
+
+        full_history_df = get_cached_full_scan_history()
+
+        if full_history_df.empty:
+            st.warning(
+                "No full evaluator scan history found yet. Run Watchlist Scanner 2.0 first."
+            )
+        else:
+            st.dataframe(
+                full_history_df,
+                width="stretch",
+                hide_index=True,
+            )
+
+            csv = full_history_df.to_csv(index=False)
+
+            st.download_button(
+                label="Download Full Evaluator History as CSV",
+                data=csv,
+                file_name="full_evaluator_scan_history.csv",
+                mime="text/csv",
+                key="download_full_evaluator_history_csv",
+            )
+
+    with history_tabs[2]:
+        st.subheader("Legacy Scanner History")
+
+        st.write("This shows older watchlist scans saved inside data/stocks.db.")
+
+        history_choice = st.radio(
+            "Choose legacy history view",
+            ["Latest Scan", "Full History"],
+            horizontal=True,
+            key="legacy_history_choice",
         )
 
-        csv = history_df.to_csv(index=False)
+        if history_choice == "Latest Scan":
+            history_df = get_cached_latest_scan()
+        else:
+            history_df = get_cached_scan_history()
 
-        st.download_button(
-            label="Download History as CSV",
-            data=csv,
-            file_name="scan_history.csv",
-            mime="text/csv",
-            key="download_scan_history_csv",
-        )
+        if history_df.empty:
+            st.warning("No legacy scan history found yet.")
+        else:
+            st.dataframe(
+                history_df,
+                width="stretch",
+                hide_index=True,
+            )
+
+            csv = history_df.to_csv(index=False)
+
+            st.download_button(
+                label="Download Legacy History as CSV",
+                data=csv,
+                file_name="legacy_scan_history.csv",
+                mime="text/csv",
+                key="download_legacy_scan_history_csv",
+            )
 
 
 # -----------------------------
@@ -1048,7 +1345,6 @@ elif mode == "Score History":
 # -----------------------------
 elif mode == "Institution Map":
     st.subheader("Institutional Smart Money Heat Map")
-
     st.write(
         "This section shows a Finviz-style institutional heat map. "
         "Universe view shows institution size and trackability. "
@@ -1133,7 +1429,9 @@ elif mode == "Institution Map":
             key="fmp_page_limit_input",
         )
 
-        if st.button("Load FMP Live Institutional Holdings", key="load_fmp_live_holdings"):
+        if st.button(
+            "Load FMP Live Institutional Holdings", key="load_fmp_live_holdings"
+        ):
             with st.spinner("Loading live institutional holdings from FMP..."):
                 live_df = get_cached_live_institution_holdings(
                     api_key=fmp_api_key_input,
@@ -1189,7 +1487,8 @@ elif mode == "Institution Map":
 
         u5.metric(
             "PE / Alt / Hedge",
-            universe_summary["alt_manager_count"] + universe_summary["hedge_fund_count"],
+            universe_summary["alt_manager_count"]
+            + universe_summary["hedge_fund_count"],
         )
 
     institutional_score_summary = build_institutional_smart_money_summary(
@@ -1274,7 +1573,9 @@ elif mode == "Institution Map":
             st.error("No institution universe found.")
         else:
             type_options = sorted(institution_df["type"].unique().tolist())
-            trackability_options = sorted(institution_df["trackability"].unique().tolist())
+            trackability_options = sorted(
+                institution_df["trackability"].unique().tolist()
+            )
             country_options = sorted(institution_df["country"].unique().tolist())
 
             filter_col1, filter_col2, filter_col3 = st.columns(3)
@@ -1334,9 +1635,7 @@ elif mode == "Institution Map":
                 merged_holdings_df["institution"].unique().tolist()
             )
 
-            sector_options = sorted(
-                merged_holdings_df["sector"].unique().tolist()
-            )
+            sector_options = sorted(merged_holdings_df["sector"].unique().tolist())
 
             inst_filter_col, sector_filter_col = st.columns(2)
 
@@ -1374,9 +1673,7 @@ elif mode == "Institution Map":
         if merged_holdings_df.empty:
             st.warning("No holdings data available.")
         else:
-            sector_options = sorted(
-                merged_holdings_df["sector"].unique().tolist()
-            )
+            sector_options = sorted(merged_holdings_df["sector"].unique().tolist())
 
             institution_options = sorted(
                 merged_holdings_df["institution"].unique().tolist()
@@ -1410,9 +1707,7 @@ elif mode == "Institution Map":
     with heatmap_tabs[3]:
         st.subheader("Holdings Table")
 
-        st.write(
-            "This is the holdings data powering the sector heat maps."
-        )
+        st.write("This is the holdings data powering the sector heat maps.")
 
         if merged_holdings_df.empty:
             st.warning("No holdings data available.")
@@ -1443,7 +1738,7 @@ elif mode == "Institution Map":
         )
 
         st.table(
-            build_institutional_score_table(institutional_score_summary)
+            build_institutional_score_table(institutional_score_summary).astype(str)
         )
 
         flow_tables = build_top_flow_tables(merged_holdings_df)
@@ -1506,7 +1801,11 @@ elif mode == "Institution Map":
 
         connector_col4.metric(
             "Institutions Matched",
-            0 if merged_holdings_df.empty else merged_holdings_df["institution"].nunique(),
+            (
+                0
+                if merged_holdings_df.empty
+                else merged_holdings_df["institution"].nunique()
+            ),
         )
 
         st.markdown("---")
@@ -1551,7 +1850,9 @@ elif mode == "Institution Map":
             ]
 
             available_columns = [
-                column for column in preview_columns if column in merged_holdings_df.columns
+                column
+                for column in preview_columns
+                if column in merged_holdings_df.columns
             ]
 
             st.dataframe(

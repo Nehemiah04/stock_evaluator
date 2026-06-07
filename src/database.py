@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pandas as pd
 
-
 DB_PATH = Path("data/stocks.db")
 
 
@@ -24,8 +23,7 @@ def create_tables():
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS scan_results (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             scan_date TEXT NOT NULL,
@@ -39,8 +37,7 @@ def create_tables():
             chart_score INTEGER,
             action_label TEXT
         )
-        """
-    )
+        """)
 
     conn.commit()
     conn.close()

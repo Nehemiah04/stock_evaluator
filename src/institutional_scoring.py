@@ -82,9 +82,15 @@ def prepare_scoring_df(df: pd.DataFrame, ticker: str | None = None) -> pd.DataFr
             scoring_df[column] = None
 
     scoring_df["ticker"] = scoring_df["ticker"].astype(str).str.upper().str.strip()
-    scoring_df["market_value_billions"] = safe_numeric_series(scoring_df["market_value_billions"])
-    scoring_df["position_change_qoq_pct"] = safe_numeric_series(scoring_df["position_change_qoq_pct"])
-    scoring_df["shares_change_qoq_pct"] = safe_numeric_series(scoring_df["shares_change_qoq_pct"])
+    scoring_df["market_value_billions"] = safe_numeric_series(
+        scoring_df["market_value_billions"]
+    )
+    scoring_df["position_change_qoq_pct"] = safe_numeric_series(
+        scoring_df["position_change_qoq_pct"]
+    )
+    scoring_df["shares_change_qoq_pct"] = safe_numeric_series(
+        scoring_df["shares_change_qoq_pct"]
+    )
 
     if ticker:
         scoring_df = scoring_df[scoring_df["ticker"] == ticker.upper()]
@@ -92,7 +98,9 @@ def prepare_scoring_df(df: pd.DataFrame, ticker: str | None = None) -> pd.DataFr
     return scoring_df
 
 
-def aggregate_top_flows(df: pd.DataFrame, group_col: str, top_n: int = 5) -> pd.DataFrame:
+def aggregate_top_flows(
+    df: pd.DataFrame, group_col: str, top_n: int = 5
+) -> pd.DataFrame:
     if df.empty or group_col not in df.columns:
         return pd.DataFrame()
 
@@ -123,8 +131,7 @@ def aggregate_top_flows(df: pd.DataFrame, group_col: str, top_n: int = 5) -> pd.
 
 
 def build_institutional_smart_money_summary(
-    df: pd.DataFrame,
-    ticker: str | None = None
+    df: pd.DataFrame, ticker: str | None = None
 ) -> dict:
     """
     Converts institutional holdings flow into a -5 to +5 Smart Money Score.

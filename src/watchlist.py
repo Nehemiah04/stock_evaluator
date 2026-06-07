@@ -45,52 +45,58 @@ def evaluate_watchlist(file_path: str = "data/watchlist.csv") -> pd.DataFrame:
             data = load_price_data(ticker)
 
             if data.empty or len(data) < 160:
-                results.append({
-                    "Ticker": ticker,
-                    "Company": company,
-                    "Current Price": None,
-                    "150DMA": None,
-                    "Distance from 150DMA": None,
-                    "Heartbeat Status": "Not enough data",
-                    "Profit Locker Status": "N/A",
-                    "Chart Score": 0,
-                    "Action Label": "Needs more data"
-                })
+                results.append(
+                    {
+                        "Ticker": ticker,
+                        "Company": company,
+                        "Current Price": None,
+                        "150DMA": None,
+                        "Distance from 150DMA": None,
+                        "Heartbeat Status": "Not enough data",
+                        "Profit Locker Status": "N/A",
+                        "Chart Score": 0,
+                        "Action Label": "Needs more data",
+                    }
+                )
                 continue
 
             metrics = calculate_heartbeat(data)
             chart_score = calculate_chart_score(metrics)
             action_label = get_action_label(metrics, chart_score)
 
-            results.append({
-                "Ticker": ticker,
-                "Company": company,
-                "Current Price": round(metrics["current_price"], 2),
-                "150DMA": round(metrics["dma_150"], 2),
-                "Distance from 150DMA": round(metrics["distance_from_150dma"], 2),
-                "Heartbeat Status": metrics["heartbeat_status"],
-                "Profit Locker Status": metrics["profit_locker_status"],
-                "Chart Score": chart_score,
-                "Action Label": action_label
-            })
+            results.append(
+                {
+                    "Ticker": ticker,
+                    "Company": company,
+                    "Current Price": round(metrics["current_price"], 2),
+                    "150DMA": round(metrics["dma_150"], 2),
+                    "Distance from 150DMA": round(metrics["distance_from_150dma"], 2),
+                    "Heartbeat Status": metrics["heartbeat_status"],
+                    "Profit Locker Status": metrics["profit_locker_status"],
+                    "Chart Score": chart_score,
+                    "Action Label": action_label,
+                }
+            )
 
         except Exception as error:
-            results.append({
-                "Ticker": ticker,
-                "Company": company,
-                "Current Price": None,
-                "150DMA": None,
-                "Distance from 150DMA": None,
-                "Heartbeat Status": f"Error: {error}",
-                "Profit Locker Status": "N/A",
-                "Chart Score": 0,
-                "Action Label": "Error"
-            })
+            results.append(
+                {
+                    "Ticker": ticker,
+                    "Company": company,
+                    "Current Price": None,
+                    "150DMA": None,
+                    "Distance from 150DMA": None,
+                    "Heartbeat Status": f"Error: {error}",
+                    "Profit Locker Status": "N/A",
+                    "Chart Score": 0,
+                    "Action Label": "Error",
+                }
+            )
 
     results_df = pd.DataFrame(results)
 
     save_scan_results(results_df)
-    
+
     results_df.to_csv("exports/watchlist_results.csv", index=False)
 
     return results_df

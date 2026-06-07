@@ -7,7 +7,6 @@ from src.valuation import build_valuation_summary
 from src.final_score import calculate_final_score, get_final_label, get_final_action
 from src.institutional_scoring import build_institutional_smart_money_summary
 
-
 DEFAULT_VALUATION_ASSUMPTIONS = {
     "dcf_growth_rate": 0.10,
     "discount_rate": 0.10,
@@ -31,8 +30,7 @@ def safe_get(dictionary: dict, key: str, default=None):
 
 
 def get_ticker_institutional_holdings(
-    holdings_df: pd.DataFrame,
-    ticker: str
+    holdings_df: pd.DataFrame, ticker: str
 ) -> pd.DataFrame:
     """
     Filters institutional holdings data for one ticker.
@@ -54,7 +52,7 @@ def get_ticker_institutional_holdings(
 def combine_manual_and_institutional_smart_money(
     manual_smart_money_score: float,
     institutional_smart_money_score: float,
-    institutional_holding_count: int
+    institutional_holding_count: int,
 ) -> float:
     """
     Combines manual smart money score and institutional smart money score.
@@ -71,7 +69,7 @@ def combine_manual_and_institutional_smart_money(
         return round(
             (manual_smart_money_score * 0.35)
             + (institutional_smart_money_score * 0.65),
-            2
+            2,
         )
 
     return round(manual_smart_money_score, 2)
@@ -81,7 +79,7 @@ def evaluate_full_stock(
     ticker: str,
     institutional_holdings_df: pd.DataFrame | None = None,
     manual_smart_money_score: float = 0,
-    valuation_assumptions: dict | None = None
+    valuation_assumptions: dict | None = None,
 ) -> dict:
     """
     Full stock evaluator engine.
@@ -99,11 +97,7 @@ def evaluate_full_stock(
     ticker = str(ticker).upper().strip()
 
     if not ticker:
-        return {
-            "ticker": ticker,
-            "status": "Error",
-            "error": "Ticker is blank"
-        }
+        return {"ticker": ticker, "status": "Error", "error": "Ticker is blank"}
 
     if valuation_assumptions is None:
         valuation_assumptions = DEFAULT_VALUATION_ASSUMPTIONS.copy()
@@ -115,7 +109,7 @@ def evaluate_full_stock(
             return {
                 "ticker": ticker,
                 "status": "Error",
-                "error": "Not enough price data"
+                "error": "Not enough price data",
             }
 
         metrics = calculate_heartbeat(data)
@@ -130,7 +124,9 @@ def evaluate_full_stock(
             current_price=metrics["current_price"],
             dcf_growth_rate=valuation_assumptions.get("dcf_growth_rate", 0.10),
             discount_rate=valuation_assumptions.get("discount_rate", 0.10),
-            terminal_growth_rate=valuation_assumptions.get("terminal_growth_rate", 0.03),
+            terminal_growth_rate=valuation_assumptions.get(
+                "terminal_growth_rate", 0.03
+            ),
             dcf_years=int(valuation_assumptions.get("dcf_years", 5)),
             eps_growth_rate=valuation_assumptions.get("eps_growth_rate", 0.10),
             future_pe=valuation_assumptions.get("future_pe", 25.0),
@@ -138,29 +134,23 @@ def evaluate_full_stock(
         )
 
         ticker_institutional_holdings = get_ticker_institutional_holdings(
-            holdings_df=institutional_holdings_df,
-            ticker=ticker
+            holdings_df=institutional_holdings_df, ticker=ticker
         )
 
         institutional_smart_money = build_institutional_smart_money_summary(
-            ticker_institutional_holdings,
-            ticker=ticker
+            ticker_institutional_holdings, ticker=ticker
         )
 
         institutional_smart_money_score = institutional_smart_money.get(
-            "institutional_smart_money_score",
-            0
+            "institutional_smart_money_score", 0
         )
 
-        institutional_holding_count = institutional_smart_money.get(
-            "holding_count",
-            0
-        )
+        institutional_holding_count = institutional_smart_money.get("holding_count", 0)
 
         final_smart_money_score = combine_manual_and_institutional_smart_money(
             manual_smart_money_score=manual_smart_money_score,
             institutional_smart_money_score=institutional_smart_money_score,
-            institutional_holding_count=institutional_holding_count
+            institutional_holding_count=institutional_holding_count,
         )
 
         final_score_data = calculate_final_score(
@@ -177,24 +167,21 @@ def evaluate_full_stock(
             final_score=final_score,
             chart_action_label=action_label,
             valuation_label=valuation.get("valuation_label", "N/A"),
-            profit_locker_status=metrics["profit_locker_status"]
+            profit_locker_status=metrics["profit_locker_status"],
         )
 
         return {
             "ticker": ticker,
             "status": "OK",
             "error": "",
-
             "current_price": metrics.get("current_price"),
             "dma_50": metrics.get("dma_50"),
             "dma_150": metrics.get("dma_150"),
             "distance_from_150dma": metrics.get("distance_from_150dma"),
             "heartbeat_status": metrics.get("heartbeat_status"),
             "profit_locker_status": metrics.get("profit_locker_status"),
-
             "chart_score": chart_score,
             "chart_action_label": action_label,
-
             "fundamental_score": fundamental_score,
             "revenue": fundamentals.get("revenue"),
             "revenue_yoy_growth": fundamentals.get("revenue_yoy_growth"),
@@ -205,7 +192,6 @@ def evaluate_full_stock(
             "total_debt": fundamentals.get("total_debt"),
             "debt_to_equity": fundamentals.get("debt_to_equity"),
             "current_ratio": fundamentals.get("current_ratio"),
-
             "valuation_score": valuation.get("valuation_score"),
             "valuation_label": valuation.get("valuation_label"),
             "valuation_method": valuation.get("valuation_method"),
@@ -213,38 +199,30 @@ def evaluate_full_stock(
             "margin_of_safety": valuation.get("margin_of_safety"),
             "dcf_value": valuation.get("dcf_value"),
             "eps_pe_value": valuation.get("eps_pe_value"),
-
             "manual_smart_money_score": manual_smart_money_score,
             "institutional_smart_money_score": institutional_smart_money_score,
             "institutional_smart_money_label": institutional_smart_money.get(
-                "institutional_smart_money_label",
-                "N/A"
+                "institutional_smart_money_label", "N/A"
             ),
             "institutional_holding_count": institutional_holding_count,
             "institutional_net_qoq_flow_pct": institutional_smart_money.get(
-                "net_qoq_flow_pct",
-                0
+                "net_qoq_flow_pct", 0
             ),
             "final_smart_money_score": final_smart_money_score,
-
             "final_score": final_score,
             "final_label": final_label,
             "final_action": final_action,
         }
 
     except Exception as error:
-        return {
-            "ticker": ticker,
-            "status": "Error",
-            "error": str(error)
-        }
+        return {"ticker": ticker, "status": "Error", "error": str(error)}
 
 
 def evaluate_full_watchlist(
     tickers: list,
     institutional_holdings_df: pd.DataFrame | None = None,
     manual_smart_money_score: float = 0,
-    valuation_assumptions: dict | None = None
+    valuation_assumptions: dict | None = None,
 ) -> pd.DataFrame:
     """
     Evaluates multiple tickers and returns a ranked DataFrame.
@@ -269,13 +247,11 @@ def evaluate_full_watchlist(
 
     if "final_score" in results_df.columns:
         results_df["final_score_sort"] = pd.to_numeric(
-            results_df["final_score"],
-            errors="coerce"
+            results_df["final_score"], errors="coerce"
         ).fillna(-1)
 
         results_df = results_df.sort_values(
-            by="final_score_sort",
-            ascending=False
+            by="final_score_sort", ascending=False
         ).drop(columns=["final_score_sort"])
 
     return results_df

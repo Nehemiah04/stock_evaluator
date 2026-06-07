@@ -17,7 +17,7 @@ def calculate_dcf_value(
     growth_rate=0.10,
     discount_rate=0.10,
     terminal_growth_rate=0.03,
-    years=5
+    years=5,
 ):
     """
     Basic DCF model using annualized free cash flow.
@@ -65,11 +65,7 @@ def calculate_dcf_value(
 
 
 def calculate_eps_pe_value(
-    eps,
-    eps_growth_rate=0.10,
-    future_pe=25,
-    discount_rate=0.10,
-    years=5
+    eps, eps_growth_rate=0.10, future_pe=25, discount_rate=0.10, years=5
 ):
     """
     EPS x Growth x P/E model.
@@ -115,9 +111,7 @@ def calculate_asset_value(stockholders_equity, shares_outstanding):
 
     value_per_share = stockholders_equity / shares_outstanding
 
-    return {
-        "value_per_share": value_per_share
-    }
+    return {"value_per_share": value_per_share}
 
 
 def calculate_margin_of_safety(intrinsic_value, current_price):
@@ -190,7 +184,7 @@ def build_valuation_summary(
     dcf_years=5,
     eps_growth_rate=0.10,
     future_pe=25,
-    eps_years=5
+    eps_years=5,
 ):
     """
     Builds a complete valuation summary using DCF, EPS/P/E, and asset value.
@@ -208,7 +202,9 @@ def build_valuation_summary(
     trailing_eps = fundamentals.get("trailing_eps")
     forward_eps = fundamentals.get("forward_eps")
 
-    eps_to_use = forward_eps if forward_eps is not None and forward_eps > 0 else trailing_eps
+    eps_to_use = (
+        forward_eps if forward_eps is not None and forward_eps > 0 else trailing_eps
+    )
 
     dcf_result = calculate_dcf_value(
         annual_fcf=annual_fcf,
@@ -216,7 +212,7 @@ def build_valuation_summary(
         growth_rate=dcf_growth_rate,
         discount_rate=discount_rate,
         terminal_growth_rate=terminal_growth_rate,
-        years=dcf_years
+        years=dcf_years,
     )
 
     eps_pe_result = calculate_eps_pe_value(
@@ -224,12 +220,11 @@ def build_valuation_summary(
         eps_growth_rate=eps_growth_rate,
         future_pe=future_pe,
         discount_rate=discount_rate,
-        years=eps_years
+        years=eps_years,
     )
 
     asset_result = calculate_asset_value(
-        stockholders_equity=stockholders_equity,
-        shares_outstanding=shares_outstanding
+        stockholders_equity=stockholders_equity, shares_outstanding=shares_outstanding
     )
 
     dcf_value = None
@@ -259,8 +254,7 @@ def build_valuation_summary(
         valuation_method = "Asset value"
 
     margin_of_safety = calculate_margin_of_safety(
-        primary_intrinsic_value,
-        current_price
+        primary_intrinsic_value, current_price
     )
 
     valuation_label = get_valuation_label(margin_of_safety)

@@ -15,7 +15,9 @@ def safe_float(value):
         return None
 
 
-def get_statement_value(statement: pd.DataFrame, possible_row_names: list, column_position: int = 0):
+def get_statement_value(
+    statement: pd.DataFrame, possible_row_names: list, column_position: int = 0
+):
     """
     Searches a yfinance financial statement for a matching row name.
     Example rows: Total Revenue, Gross Profit, Operating Income, etc.
@@ -116,29 +118,24 @@ def load_fundamentals(ticker: str) -> dict:
     # -----------------------------
     # Income statement
     # -----------------------------
-    revenue = get_statement_value(
-        quarterly_income,
-        ["Total Revenue", "Revenue"]
-    )
+    revenue = get_statement_value(quarterly_income, ["Total Revenue", "Revenue"])
 
     revenue_year_ago = None
-    if quarterly_income is not None and not quarterly_income.empty and quarterly_income.shape[1] >= 5:
+    if (
+        quarterly_income is not None
+        and not quarterly_income.empty
+        and quarterly_income.shape[1] >= 5
+    ):
         revenue_year_ago = get_statement_value(
-            quarterly_income,
-            ["Total Revenue", "Revenue"],
-            column_position=4
+            quarterly_income, ["Total Revenue", "Revenue"], column_position=4
         )
 
     revenue_yoy_growth = percent_change(revenue, revenue_year_ago)
 
-    gross_profit = get_statement_value(
-        quarterly_income,
-        ["Gross Profit"]
-    )
+    gross_profit = get_statement_value(quarterly_income, ["Gross Profit"])
 
     operating_income = get_statement_value(
-        quarterly_income,
-        ["Operating Income", "Operating Income or Loss"]
+        quarterly_income, ["Operating Income", "Operating Income or Loss"]
     )
 
     gross_margin = safe_ratio(gross_profit, revenue)
@@ -149,12 +146,11 @@ def load_fundamentals(ticker: str) -> dict:
     # -----------------------------
     operating_cash_flow = get_statement_value(
         quarterly_cashflow,
-        ["Operating Cash Flow", "Total Cash From Operating Activities"]
+        ["Operating Cash Flow", "Total Cash From Operating Activities"],
     )
 
     capital_expenditure = get_statement_value(
-        quarterly_cashflow,
-        ["Capital Expenditure", "Capital Expenditures"]
+        quarterly_cashflow, ["Capital Expenditure", "Capital Expenditures"]
     )
 
     free_cash_flow = calculate_fcf(operating_cash_flow, capital_expenditure)
@@ -168,28 +164,22 @@ def load_fundamentals(ticker: str) -> dict:
         [
             "Cash And Cash Equivalents",
             "Cash Cash Equivalents And Short Term Investments",
-            "Cash And Short Term Investments"
-        ]
+            "Cash And Short Term Investments",
+        ],
     )
 
-    total_debt = get_statement_value(
-        quarterly_balance,
-        ["Total Debt"]
-    )
+    total_debt = get_statement_value(quarterly_balance, ["Total Debt"])
 
     stockholders_equity = get_statement_value(
-        quarterly_balance,
-        ["Stockholders Equity", "Total Stockholder Equity"]
+        quarterly_balance, ["Stockholders Equity", "Total Stockholder Equity"]
     )
 
     current_assets = get_statement_value(
-        quarterly_balance,
-        ["Current Assets", "Total Current Assets"]
+        quarterly_balance, ["Current Assets", "Total Current Assets"]
     )
 
     current_liabilities = get_statement_value(
-        quarterly_balance,
-        ["Current Liabilities", "Total Current Liabilities"]
+        quarterly_balance, ["Current Liabilities", "Total Current Liabilities"]
     )
 
     debt_to_equity = safe_ratio(total_debt, stockholders_equity)
@@ -236,7 +226,7 @@ def load_fundamentals(ticker: str) -> dict:
         "annualized_fcf": annualized_fcf,
         "cash_runway_years": cash_runway_years,
         "cash_runway_label": cash_runway_label,
-         "shares_outstanding": shares_outstanding,
+        "shares_outstanding": shares_outstanding,
         "trailing_eps": trailing_eps,
         "forward_eps": forward_eps,
         "market_cap": market_cap,

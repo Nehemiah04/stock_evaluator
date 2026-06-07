@@ -1,0 +1,40 @@
+ticker,company,sector
+MSFT,Microsoft,Technology
+NVDA,Nvidia,Technology
+AAPL,Apple,Technology
+GOOGL,Alphabet,Communication Services
+META,Meta Platforms,Technology
+AVGO,Broadcom,Technology
+AMD,Advanced Micro Devices,Technology
+ORCL,Oracle,Technology
+AMZN,Amazon,Consumer Discretionary
+TSLA,Tesla,Consumer Discretionary
+V,Visa,Financials
+MA,Mastercard,Financials
+JPM,JPMorgan Chase,Financials
+BAC,Bank of America,Financials
+BX,Blackstone,Financials
+APO,Apollo Global Management,Financials
+KKR,KKR,Financials
+ARES,Ares Management,Financials
+OWL,Blue Owl Capital,Financials
+LLY,Eli Lilly,Healthcare
+UNH,UnitedHealth,Healthcare
+MRK,Merck,Healthcare
+ABBV,AbbVie,Healthcare
+JNJ,Johnson & Johnson,Healthcare
+TMO,Thermo Fisher,Healthcare
+ISRG,Intuitive Surgical,Healthcare
+XOM,Exxon Mobil,Energy
+CVX,Chevron,Energy
+CEG,Constellation Energy,Utilities
+NEE,NextEra Energy,Utilities
+GE,GE Aerospace,Industrials
+CAT,Caterpillar,Industrials
+RTX,RTX,Industrials
+BA,Boeing,Industrials
+ETN,Eaton,Industrials
+UNP,Union Pacific,Industrials
+PLD,Prologis,Real Estate
+BAM,Brookfield Asset Management,Real Estate
+PG,Procter & Gamble,Consumer Staples

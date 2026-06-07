@@ -1,0 +1,39 @@
+cusip,ticker,company,sector
+594918104,MSFT,Microsoft,Technology
+67066G104,NVDA,Nvidia,Technology
+037833100,AAPL,Apple,Technology
+02079K305,GOOGL,Alphabet,Communication Services
+02079K107,GOOG,Alphabet,Communication Services
+30303M102,META,Meta Platforms,Technology
+11135F101,AVGO,Broadcom,Technology
+007903107,AMD,Advanced Micro Devices,Technology
+023135106,AMZN,Amazon,Consumer Discretionary
+88160R101,TSLA,Tesla,Consumer Discretionary
+92826C839,V,Visa,Financials
+57636Q104,MA,Mastercard,Financials
+46625H100,JPM,JPMorgan Chase,Financials
+060505104,BAC,Bank of America,Financials
+09260D107,BX,Blackstone,Financials
+03769M106,APO,Apollo Global Management,Financials
+48251W104,KKR,KKR,Financials
+04014Y101,ARES,Ares Management,Financials
+69121K104,OWL,Blue Owl Capital,Financials
+532457108,LLY,Eli Lilly,Healthcare
+91324P102,UNH,UnitedHealth,Healthcare
+58933Y105,MRK,Merck,Healthcare
+00287Y109,ABBV,AbbVie,Healthcare
+478160104,JNJ,Johnson & Johnson,Healthcare
+883556102,TMO,Thermo Fisher,Healthcare
+46120E602,ISRG,Intuitive Surgical,Healthcare
+30231G102,XOM,Exxon Mobil,Energy
+166764100,CVX,Chevron,Energy
+21037T109,CEG,Constellation Energy,Utilities
+65339F101,NEE,NextEra Energy,Utilities
+369604301,GE,GE Aerospace,Industrials
+149123101,CAT,Caterpillar,Industrials
+75513E101,RTX,RTX,Industrials
+097023105,BA,Boeing,Industrials
+G29183103,ETN,Eaton,Industrials
+907818108,UNP,Union Pacific,Industrials
+74340W103,PLD,Prologis,Real Estate
+742718109,PG,Procter & Gamble,Consumer Staples

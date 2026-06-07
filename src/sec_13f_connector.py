@@ -7,7 +7,6 @@ from typing import Optional
 import pandas as pd
 import requests
 
-
 SEC_MANAGERS_PATH = Path("data/sec_13f_managers.csv")
 CUSIP_MAP_PATH = Path("data/sec_13f_cusip_sector_map.csv")
 
@@ -29,10 +28,7 @@ def get_sec_headers() -> dict:
     SEC requests should include a descriptive User-Agent.
     Replace the default with your own email if you want.
     """
-    user_agent = os.getenv(
-        "SEC_USER_AGENT",
-        "stock_evaluator/1.0 contact@example.com"
-    )
+    user_agent = os.getenv("SEC_USER_AGENT", "stock_evaluator/1.0 contact@example.com")
 
     return {
         "User-Agent": user_agent,
@@ -42,10 +38,7 @@ def get_sec_headers() -> dict:
 
 
 def get_sec_archive_headers() -> dict:
-    user_agent = os.getenv(
-        "SEC_USER_AGENT",
-        "stock_evaluator/1.0 contact@example.com"
-    )
+    user_agent = os.getenv("SEC_USER_AGENT", "stock_evaluator/1.0 contact@example.com")
 
     return {
         "User-Agent": user_agent,
@@ -65,13 +58,7 @@ def clean_cusip(cusip: str) -> str:
     if cusip is None:
         return ""
 
-    return (
-        str(cusip)
-        .upper()
-        .replace(" ", "")
-        .replace("-", "")
-        .strip()
-    )
+    return str(cusip).upper().replace(" ", "").replace("-", "").strip()
 
 
 def load_sec_managers(file_path: str = str(SEC_MANAGERS_PATH)) -> pd.DataFrame:
@@ -81,10 +68,14 @@ def load_sec_managers(file_path: str = str(SEC_MANAGERS_PATH)) -> pd.DataFrame:
         return pd.DataFrame(columns=["institution", "cik", "type"])
 
     required_columns = ["institution", "cik", "type"]
-    missing_columns = [column for column in required_columns if column not in df.columns]
+    missing_columns = [
+        column for column in required_columns if column not in df.columns
+    ]
 
     if missing_columns:
-        raise ValueError(f"Missing required columns in sec_13f_managers.csv: {missing_columns}")
+        raise ValueError(
+            f"Missing required columns in sec_13f_managers.csv: {missing_columns}"
+        )
 
     df["institution"] = df["institution"].astype(str).str.strip()
     df["cik"] = df["cik"].astype(str).str.strip()
@@ -100,10 +91,14 @@ def load_cusip_map(file_path: str = str(CUSIP_MAP_PATH)) -> pd.DataFrame:
         return pd.DataFrame(columns=["cusip", "ticker", "company", "sector"])
 
     required_columns = ["cusip", "ticker", "company", "sector"]
-    missing_columns = [column for column in required_columns if column not in df.columns]
+    missing_columns = [
+        column for column in required_columns if column not in df.columns
+    ]
 
     if missing_columns:
-        raise ValueError(f"Missing required columns in sec_13f_cusip_sector_map.csv: {missing_columns}")
+        raise ValueError(
+            f"Missing required columns in sec_13f_cusip_sector_map.csv: {missing_columns}"
+        )
 
     df["cusip"] = df["cusip"].apply(clean_cusip)
     df["ticker"] = df["ticker"].astype(str).str.upper().str.strip()
@@ -483,7 +478,6 @@ def convert_manager_holdings_to_standard_rows(
         )
 
     return rows
-
 
 
 def clip_change_pct(value: float, cap: float = 100.0) -> float:

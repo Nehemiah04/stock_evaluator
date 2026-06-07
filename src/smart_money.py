@@ -12,7 +12,7 @@ def score_signal(signal: str) -> int:
         "Slightly Bearish": -1,
         "Bearish": -3,
         "Strong Bearish": -5,
-        "Unknown": 0
+        "Unknown": 0,
     }
 
     return signal_scores.get(signal, 0)
@@ -22,7 +22,7 @@ def calculate_smart_money_score(
     insider_signal: str,
     politician_signal: str,
     institutional_signal: str,
-    officer_signal: str
+    officer_signal: str,
 ) -> dict:
     """
     Calculates the total Smart Money score.
@@ -111,7 +111,7 @@ def build_smart_money_summary(
     politician_signal: str,
     institutional_signal: str,
     officer_signal: str,
-    notes: str = ""
+    notes: str = "",
 ) -> dict:
     """
     Builds full Smart Money summary.
@@ -121,7 +121,7 @@ def build_smart_money_summary(
         insider_signal=insider_signal,
         politician_signal=politician_signal,
         institutional_signal=institutional_signal,
-        officer_signal=officer_signal
+        officer_signal=officer_signal,
     )
 
     smart_money_score = score_data["smart_money_score"]
@@ -137,5 +137,5 @@ def build_smart_money_summary(
         "institutional_signal": institutional_signal,
         "officer_signal": officer_signal,
         "notes": notes,
-        **score_data
+        **score_data,
     }

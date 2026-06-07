@@ -3,11 +3,12 @@ from pathlib import Path
 import pandas as pd
 import plotly.express as px
 
-
 HOLDINGS_PATH = Path("data/institution_holdings_sample.csv")
 
 
-def load_institution_holdings_sample(file_path: str = str(HOLDINGS_PATH)) -> pd.DataFrame:
+def load_institution_holdings_sample(
+    file_path: str = str(HOLDINGS_PATH),
+) -> pd.DataFrame:
     try:
         df = pd.read_csv(file_path)
     except FileNotFoundError:
@@ -25,7 +26,9 @@ def load_institution_holdings_sample(file_path: str = str(HOLDINGS_PATH)) -> pd.
         "report_date",
     ]
 
-    missing_columns = [column for column in required_columns if column not in df.columns]
+    missing_columns = [
+        column for column in required_columns if column not in df.columns
+    ]
 
     if missing_columns:
         raise ValueError(
@@ -69,7 +72,9 @@ def load_institution_holdings_sample(file_path: str = str(HOLDINGS_PATH)) -> pd.
     return df
 
 
-def merge_holdings_with_universe(holdings_df: pd.DataFrame, universe_df: pd.DataFrame) -> pd.DataFrame:
+def merge_holdings_with_universe(
+    holdings_df: pd.DataFrame, universe_df: pd.DataFrame
+) -> pd.DataFrame:
     if holdings_df.empty:
         return pd.DataFrame()
 
@@ -102,7 +107,9 @@ def merge_holdings_with_universe(holdings_df: pd.DataFrame, universe_df: pd.Data
     merged_df["type"] = merged_df["type"].fillna("Unknown")
     merged_df["city"] = merged_df["city"].fillna("Unknown")
     merged_df["country"] = merged_df["country"].fillna("Unknown")
-    merged_df["assets_or_aum_trillions"] = merged_df["assets_or_aum_trillions"].fillna(0)
+    merged_df["assets_or_aum_trillions"] = merged_df["assets_or_aum_trillions"].fillna(
+        0
+    )
     merged_df["trackability"] = merged_df["trackability"].fillna("Unknown")
 
     return merged_df
@@ -220,7 +227,11 @@ def build_holdings_summary(df: pd.DataFrame) -> dict:
     net_qoq_change = weighted_average_qoq(df)
     sector_totals = df.groupby("sector")["market_value_billions"].sum()
 
-    top_sector = "N/A" if sector_totals.empty else sector_totals.sort_values(ascending=False).index[0]
+    top_sector = (
+        "N/A"
+        if sector_totals.empty
+        else sector_totals.sort_values(ascending=False).index[0]
+    )
 
     return {
         "institution_count": df["institution"].nunique(),

@@ -2,7 +2,7 @@ def calculate_final_score(
     chart_score: int,
     fundamental_score: int,
     valuation_score: int,
-    smart_money_score: int = 0
+    smart_money_score: int = 0,
 ) -> dict:
     """
     Combines chart, fundamentals, valuation, and smart money into one final score.
@@ -39,7 +39,7 @@ def calculate_final_score(
         "fundamental_weight": fundamental_weight,
         "valuation_weight": valuation_weight,
         "smart_money_weight": smart_money_weight,
-        "smart_money_normalized": smart_money_normalized
+        "smart_money_normalized": smart_money_normalized,
     }
 
 
@@ -66,7 +66,7 @@ def get_final_action(
     final_score: int,
     chart_action_label: str,
     valuation_label: str,
-    profit_locker_status: str
+    profit_locker_status: str,
 ) -> str:
     """
     Creates a practical action based on score, chart, valuation, and Profit Locker status.
@@ -81,7 +81,11 @@ def get_final_action(
     if "broken" in chart_action_label.lower():
         return "Avoid until chart recovers above the 150DMA"
 
-    if final_score >= 85 and valuation_label in ["Strong undervaluation", "Attractive", "Decent"]:
+    if final_score >= 85 and valuation_label in [
+        "Strong undervaluation",
+        "Attractive",
+        "Decent",
+    ]:
         return "High-quality setup; consider buy zone"
 
     if final_score >= 75:

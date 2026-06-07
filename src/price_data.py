@@ -9,11 +9,7 @@ def load_price_data(ticker: str) -> pd.DataFrame:
     """
 
     data = yf.download(
-        ticker,
-        period="2y",
-        interval="1d",
-        auto_adjust=False,
-        progress=False
+        ticker, period="2y", interval="1d", auto_adjust=False, progress=False
     )
 
     if data.empty:
