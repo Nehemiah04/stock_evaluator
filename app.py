@@ -80,6 +80,7 @@ from src.thesis_reports import (
     build_thesis_summary_table,
 )
 from src.notion_exporter import publish_to_notion_workspace, NotionExportError
+from src.monitor import build_latest_monitor_report, get_monitor_display_columns
 
 # -----------------------------
 # Page Setup
@@ -263,6 +264,7 @@ mode = st.sidebar.radio(
         "Score History",
         "Institution Map",
         "Portfolio",
+        "Daily Monitor",
     ],
     key="dashboard_mode",
 )
@@ -2514,3 +2516,152 @@ elif mode == "Portfolio":
                     ticker="PORTFOLIO",
                     tags="portfolio,thesis,batch_report",
                 )
+
+
+# -----------------------------
+# Daily Monitor
+# -----------------------------
+elif mode == "Daily Monitor":
+    st.subheader("Daily Monitor")
+
+    st.write(
+        "This page compares the latest Full Evaluator scan against the previous scan "
+        "and flags upgrades, downgrades, 150DMA changes, and Profit Locker triggers."
+    )
+
+    change_df, monitor_summary, monitor_timestamps = build_latest_monitor_report()
+
+    if not monitor_timestamps:
+        st.warning(
+            "No full watchlist scans found yet. Run Watchlist Scanner 2.0 at least twice to compare changes."
+        )
+    elif len(monitor_timestamps) == 1:
+        st.info(
+            "Only one full scan found. Run Watchlist Scanner 2.0 one more time later to create a comparison."
+        )
+
+    if monitor_timestamps:
+        st.caption("Scans compared: " + " -> ".join(monitor_timestamps))
+
+    m1, m2, m3, m4, m5, m6 = st.columns(6)
+
+    m1.metric(
+        "Rows",
+        monitor_summary["rows"],
+    )
+
+    m2.metric(
+        "Alerts",
+        monitor_summary["alerts"],
+    )
+
+    m3.metric(
+        "Upgrades",
+        monitor_summary["upgrades"],
+    )
+
+    m4.metric(
+        "Downgrades",
+        monitor_summary["downgrades"],
+    )
+
+    m5.metric(
+        "Profit Locker Triggers",
+        monitor_summary["profit_locker_triggers"],
+    )
+
+    m6.metric(
+        "Broke Below 150DMA",
+        monitor_summary["broke_below_150dma"],
+    )
+
+    if change_df.empty:
+        st.warning("No monitor data available yet.")
+    else:
+        st.markdown("### Monitor Filters")
+
+        monitor_filter_col1, monitor_filter_col2, monitor_filter_col3 = st.columns(3)
+
+        show_alerts_only = monitor_filter_col1.checkbox(
+            "Show alerts only",
+            value=False,
+            key="monitor_show_alerts_only",
+        )
+
+        show_upgrades_only = monitor_filter_col2.checkbox(
+            "Show upgrades only",
+            value=False,
+            key="monitor_show_upgrades_only",
+        )
+
+        show_downgrades_only = monitor_filter_col3.checkbox(
+            "Show downgrades only",
+            value=False,
+            key="monitor_show_downgrades_only",
+        )
+
+        filtered_monitor_df = change_df.copy()
+
+        if show_alerts_only:
+            filtered_monitor_df = filtered_monitor_df[
+                filtered_monitor_df["monitor_status"]
+                .astype(str)
+                .str.contains("Alert", case=False, na=False)
+            ]
+
+        if show_upgrades_only:
+            filtered_monitor_df = filtered_monitor_df[
+                filtered_monitor_df["score_change_label"]
+                .astype(str)
+                .str.contains("upgrade", case=False, na=False)
+            ]
+
+        if show_downgrades_only:
+            filtered_monitor_df = filtered_monitor_df[
+                filtered_monitor_df["score_change_label"]
+                .astype(str)
+                .str.contains("downgrade", case=False, na=False)
+            ]
+
+        display_columns = [
+            column
+            for column in get_monitor_display_columns()
+            if column in filtered_monitor_df.columns
+        ]
+
+        st.markdown("### Change Detection Table")
+
+        st.dataframe(
+            filtered_monitor_df[display_columns],
+            width="stretch",
+            hide_index=True,
+        )
+
+        monitor_csv = filtered_monitor_df.to_csv(index=False)
+
+        st.download_button(
+            label="Download Monitor Report as CSV",
+            data=monitor_csv,
+            file_name="daily_monitor_report.csv",
+            mime="text/csv",
+            key="download_daily_monitor_report_csv",
+        )
+
+        st.markdown("### Alert Summary")
+
+        alert_rows = filtered_monitor_df[
+            filtered_monitor_df["monitor_status"]
+            .astype(str)
+            .str.contains("Alert", case=False, na=False)
+        ]
+
+        if alert_rows.empty:
+            st.success("No major monitor alerts triggered.")
+        else:
+            st.warning("These tickers triggered monitor alerts.")
+
+            st.dataframe(
+                alert_rows[display_columns],
+                width="stretch",
+                hide_index=True,
+            )
