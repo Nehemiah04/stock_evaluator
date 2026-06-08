@@ -88,6 +88,7 @@ from src.monitor_visuals import (
     build_profit_locker_change_table,
     build_top_monitor_movers_table,
 )
+from src.monitor_alert_database import save_monitor_alerts, load_monitor_alert_history
 
 # -----------------------------
 # Page Setup
@@ -175,6 +176,19 @@ def get_cached_portfolio_positions():
 @st.cache_data(ttl=3600)
 def get_cached_portfolio_targets():
     return load_portfolio_targets("data/portfolio_targets.csv")
+
+
+@st.cache_data(ttl=300)
+def get_cached_monitor_alert_history(
+    limit: int,
+    ticker_filter: str,
+    status_filter: str,
+):
+    return load_monitor_alert_history(
+        limit=limit,
+        ticker_filter=ticker_filter,
+        status_filter=status_filter,
+    )
 
 
 # -----------------------------
@@ -2653,6 +2667,109 @@ elif mode == "Daily Monitor":
             mime="text/csv",
             key="download_daily_monitor_report_csv",
         )
+
+        st.markdown("---")
+        st.subheader("Save Monitor Alert Snapshot")
+
+        save_only_important = st.checkbox(
+            "Save only important monitor rows",
+            value=True,
+            key="save_only_important_monitor_rows",
+        )
+
+        if st.button(
+            "Save Monitor Alerts to History",
+            key="save_monitor_alerts_to_history",
+        ):
+            saved_alert_count = save_monitor_alerts(
+                monitor_df=filtered_monitor_df,
+                monitor_timestamps=monitor_timestamps,
+                save_only_important=save_only_important,
+            )
+
+            st.cache_data.clear()
+
+            if saved_alert_count > 0:
+                st.success(f"Saved {saved_alert_count} monitor alert rows to history.")
+            else:
+                st.info("No monitor alert rows were saved.")
+
+        st.markdown("---")
+        st.subheader("Saved Monitor Alert History")
+
+        alert_history_col1, alert_history_col2, alert_history_col3 = st.columns(3)
+
+        monitor_alert_limit = alert_history_col1.number_input(
+            "Alert history rows to load",
+            min_value=10,
+            max_value=2000,
+            value=500,
+            step=50,
+            key="monitor_alert_history_limit",
+        )
+
+        monitor_alert_ticker_filter = alert_history_col2.text_input(
+            "Ticker filter",
+            value="",
+            key="monitor_alert_ticker_filter",
+        )
+
+        monitor_alert_status_filter = alert_history_col3.selectbox(
+            "Status filter",
+            ["All", "Alert", "Positive", "Stable"],
+            index=0,
+            key="monitor_alert_status_filter",
+        )
+
+        monitor_alert_history_df = get_cached_monitor_alert_history(
+            limit=int(monitor_alert_limit),
+            ticker_filter=monitor_alert_ticker_filter,
+            status_filter=monitor_alert_status_filter,
+        )
+
+        if monitor_alert_history_df.empty:
+            st.warning("No saved monitor alert history found yet.")
+        else:
+            h1, h2, h3 = st.columns(3)
+
+            h1.metric(
+                "Saved Alert Rows",
+                len(monitor_alert_history_df),
+            )
+
+            h2.metric(
+                "Tickers",
+                (
+                    monitor_alert_history_df["ticker"].nunique()
+                    if "ticker" in monitor_alert_history_df.columns
+                    else 0
+                ),
+            )
+
+            h3.metric(
+                "Saved Snapshots",
+                (
+                    monitor_alert_history_df["saved_at"].nunique()
+                    if "saved_at" in monitor_alert_history_df.columns
+                    else 0
+                ),
+            )
+
+            st.dataframe(
+                monitor_alert_history_df,
+                width="stretch",
+                hide_index=True,
+            )
+
+            monitor_alert_history_csv = monitor_alert_history_df.to_csv(index=False)
+
+            st.download_button(
+                label="Download Monitor Alert History as CSV",
+                data=monitor_alert_history_csv,
+                file_name="monitor_alert_history.csv",
+                mime="text/csv",
+                key="download_monitor_alert_history_csv",
+            )
 
         st.markdown("---")
         st.subheader("Daily Monitor Visual Dashboard")
