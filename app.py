@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -80,6 +82,7 @@ from src.thesis_reports import (
     build_thesis_summary_table,
 )
 from src.notion_exporter import publish_to_notion_workspace, NotionExportError
+from src.research_notes_database import save_research_note
 from src.monitor import build_latest_monitor_report, get_monitor_display_columns
 from src.monitor_visuals import (
     build_monitor_status_chart,
@@ -89,6 +92,7 @@ from src.monitor_visuals import (
     build_top_monitor_movers_table,
 )
 from src.monitor_alert_database import save_monitor_alerts, load_monitor_alert_history
+from src.workspace_exporter import build_research_workspace_export
 
 # -----------------------------
 # Page Setup
@@ -286,6 +290,7 @@ mode = st.sidebar.radio(
         "Institution Map",
         "Portfolio",
         "Daily Monitor",
+        "Workspace Export",
     ],
     key="dashboard_mode",
 )
@@ -346,6 +351,20 @@ def send_research_to_notion(
         return
 
     notion_url = result.get("url")
+
+    try:
+        save_research_note(
+            title=title,
+            content=content,
+            source=source,
+            ticker=ticker,
+            tags=tags,
+            notion_url=notion_url or "",
+            destination_type=notion_destination_type,
+            destination_id=notion_destination_id,
+        )
+    except Exception:
+        st.warning("Sent to Notion, but the local research archive copy was not saved.")
 
     if notion_url:
         st.success("Sent to Notion.")
@@ -2848,3 +2867,143 @@ elif mode == "Daily Monitor":
                 width="stretch",
                 hide_index=True,
             )
+
+
+# -----------------------------
+# Workspace Export
+# -----------------------------
+elif mode == "Workspace Export":
+    st.subheader("Research Workspace Export")
+
+    st.write(
+        "This page exports your latest scan, scan history, monitor alerts, best ideas, "
+        "and research notes into a clean research workspace folder and ZIP file."
+    )
+
+    export_col1, export_col2, export_col3 = st.columns(3)
+
+    min_best_idea_score = export_col1.number_input(
+        "Minimum score for Best Ideas",
+        min_value=0,
+        max_value=100,
+        value=70,
+        step=5,
+        key="workspace_min_best_idea_score",
+    )
+
+    scan_history_limit = export_col2.number_input(
+        "Scan history rows",
+        min_value=100,
+        max_value=10000,
+        value=1000,
+        step=100,
+        key="workspace_scan_history_limit",
+    )
+
+    notes_limit = export_col3.number_input(
+        "Research notes rows",
+        min_value=100,
+        max_value=10000,
+        value=1000,
+        step=100,
+        key="workspace_notes_limit",
+    )
+
+    alert_history_limit = st.number_input(
+        "Monitor alert history rows",
+        min_value=100,
+        max_value=10000,
+        value=1000,
+        step=100,
+        key="workspace_alert_history_limit",
+    )
+
+    if st.button(
+        "Build Research Workspace Export",
+        key="build_research_workspace_export",
+    ):
+        with st.spinner("Building research workspace export..."):
+            export_result = build_research_workspace_export(
+                min_best_idea_score=float(min_best_idea_score),
+                scan_history_limit=int(scan_history_limit),
+                alert_history_limit=int(alert_history_limit),
+                notes_limit=int(notes_limit),
+            )
+
+            st.session_state["workspace_export_result"] = export_result
+
+    export_result = st.session_state.get(
+        "workspace_export_result",
+        None,
+    )
+
+    if export_result is None:
+        st.info("Click Build Research Workspace Export to create your export package.")
+    else:
+        st.success("Research workspace export created.")
+
+        e1, e2, e3, e4, e5 = st.columns(5)
+
+        e1.metric(
+            "Latest Scan Rows",
+            export_result["latest_scan_rows"],
+        )
+
+        e2.metric(
+            "Best Ideas",
+            export_result["best_ideas_rows"],
+        )
+
+        e3.metric(
+            "Alert Rows",
+            export_result["alert_history_rows"],
+        )
+
+        e4.metric(
+            "Research Notes",
+            export_result["research_notes_rows"],
+        )
+
+        e5.metric(
+            "Markdown Notes",
+            export_result["notes_markdown_files"],
+        )
+
+        st.markdown("### Export Location")
+
+        st.code(
+            export_result["export_folder"],
+            language="text",
+        )
+
+        st.markdown("### ZIP File")
+
+        st.code(
+            export_result["zip_path"],
+            language="text",
+        )
+
+        zip_path = export_result["zip_path"]
+
+        try:
+            with open(zip_path, "rb") as zip_file:
+                zip_bytes = zip_file.read()
+
+            st.download_button(
+                label="Download Research Workspace ZIP",
+                data=zip_bytes,
+                file_name=Path(zip_path).name,
+                mime="application/zip",
+                key="download_research_workspace_zip",
+            )
+        except Exception:
+            st.warning("ZIP file was created locally but could not be loaded.")
+
+        st.markdown("### Workspace Summary Preview")
+
+        st.markdown(export_result["summary_markdown"])
+
+        st.markdown("### Exported Files")
+
+        for file_path in export_result["exported_files"]:
+            st.write(file_path)

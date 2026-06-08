@@ -5,6 +5,7 @@ __pycache__/
 
 data/stocks.db
 data/exports/
+data/research_workspace/
 exports/
 logs/
 .streamlit/secrets.toml
