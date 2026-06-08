@@ -4,6 +4,8 @@ __pycache__/
 .DS_Store
 
 data/stocks.db
+data/exports/
 exports/
+logs/
 .streamlit/secrets.toml
 .env
