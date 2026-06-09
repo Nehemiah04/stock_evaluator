@@ -8,6 +8,12 @@ from src.price_data import load_price_data
 from src.scoring import calculate_heartbeat, calculate_chart_score, get_action_label
 from src.full_evaluator import evaluate_full_watchlist, DEFAULT_VALUATION_ASSUMPTIONS
 from src.watchlist_loader import load_watchlist_tickers
+from src.market_universe import (
+    build_market_universe,
+    save_market_universe,
+    load_market_universe,
+    load_market_universe_tickers,
+)
 from src.database import load_scan_history, load_latest_scan
 from src.fundamentals import load_fundamentals, calculate_fundamental_score
 from src.valuation import build_valuation_summary
@@ -105,6 +111,8 @@ st.set_page_config(
 st.title("Stock Evaluator Dashboard")
 st.caption("Version 1: 150DMA Heartbeat + Profit Locker")
 
+PUBLIC_MAX_SCAN_TICKERS = 50
+
 
 # -----------------------------
 # Cached Data Loaders
@@ -160,6 +168,16 @@ def get_cached_sec_13f_holdings(manager_limit: int):
 @st.cache_data(ttl=3600)
 def get_cached_watchlist_tickers():
     return load_watchlist_tickers("data/watchlist.csv")
+
+
+@st.cache_data(ttl=3600)
+def get_cached_market_universe():
+    return load_market_universe()
+
+
+@st.cache_data(ttl=3600)
+def get_cached_market_universe_tickers(max_tickers: int):
+    return load_market_universe_tickers(max_tickers=max_tickers)
 
 
 @st.cache_data(ttl=300)
@@ -291,6 +309,7 @@ mode = st.sidebar.radio(
         "Portfolio",
         "Daily Monitor",
         "Workspace Export",
+        "Market Universe",
     ],
     key="dashboard_mode",
 )
@@ -1021,43 +1040,80 @@ elif mode == "Watchlist Scanner":
     st.subheader("Watchlist Scanner 2.0")
 
     st.write(
-        "This scans tickers from data/watchlist.csv using the full evaluator engine: "
+        "This scans a controlled ticker list using the full evaluator engine: "
         "chart score, fundamentals, valuation, institutional smart money, and final score."
     )
 
-    watchlist_tickers = get_cached_watchlist_tickers()
+    manual_watchlist_tickers = get_cached_watchlist_tickers()
 
-    if not watchlist_tickers:
-        st.error("No tickers found. Check data/watchlist.csv.")
-    else:
-        st.success(f"Loaded {len(watchlist_tickers)} tickers from data/watchlist.csv.")
+    with st.expander("Scanner Settings", expanded=True):
+        st.markdown("### Scanner Universe")
 
-        with st.expander("Scanner Settings", expanded=True):
-            max_scan_count = st.number_input(
-                "Maximum tickers to scan",
-                min_value=1,
-                max_value=max(1, len(watchlist_tickers)),
-                value=min(10, len(watchlist_tickers)),
-                step=1,
-                key="watchlist_max_scan_count",
+        scanner_source = st.selectbox(
+            "Choose scanner source",
+            [
+                "Manual Watchlist",
+                "Full Market Universe",
+            ],
+            index=0,
+            key="scanner_source",
+        )
+
+        max_scan_tickers = st.number_input(
+            "Maximum tickers to scan",
+            min_value=1,
+            max_value=PUBLIC_MAX_SCAN_TICKERS,
+            value=PUBLIC_MAX_SCAN_TICKERS,
+            step=1,
+            key="max_scan_tickers",
+        )
+
+        if scanner_source == "Manual Watchlist":
+            scanner_ticker_source = "data/watchlist.csv"
+            available_scan_tickers = manual_watchlist_tickers
+        else:
+            scanner_ticker_source = "data/market_universe.csv"
+            available_scan_tickers = get_cached_market_universe_tickers(
+                max_tickers=PUBLIC_MAX_SCAN_TICKERS,
+            )
+
+        selected_universe_tickers = available_scan_tickers[: int(max_scan_tickers)]
+
+        if not available_scan_tickers:
+            if scanner_source == "Manual Watchlist":
+                st.error("No tickers found. Check data/watchlist.csv.")
+            else:
+                st.warning(
+                    "No market universe found yet. Open Market Universe and refresh it first."
+                )
+
+            selected_scan_tickers = []
+        else:
+            st.success(
+                f"Loaded {len(available_scan_tickers)} tickers from {scanner_ticker_source}. "
+                f"Public scans are capped at {PUBLIC_MAX_SCAN_TICKERS} tickers."
             )
 
             selected_scan_tickers = st.multiselect(
                 "Choose tickers to scan",
-                watchlist_tickers,
-                default=watchlist_tickers[: int(max_scan_count)],
+                selected_universe_tickers,
+                default=selected_universe_tickers,
                 key="watchlist_selected_tickers",
             )
 
-            manual_scanner_smart_money_score = st.number_input(
-                "Manual Smart Money Score for Scanner (-5 to +5)",
-                min_value=-5.0,
-                max_value=5.0,
-                value=0.0,
-                step=0.5,
-                key="manual_scanner_smart_money_score",
-            )
+        manual_scanner_smart_money_score = st.number_input(
+            "Manual Smart Money Score for Scanner (-5 to +5)",
+            min_value=-5.0,
+            max_value=5.0,
+            value=0.0,
+            step=0.5,
+            key="manual_scanner_smart_money_score",
+        )
 
+    if not available_scan_tickers:
+        st.stop()
+
+    else:
         with st.expander("Scanner Valuation Assumptions", expanded=False):
             scanner_dcf_growth_rate = st.number_input(
                 "DCF FCF Growth Rate (%)",
@@ -3007,3 +3063,94 @@ elif mode == "Workspace Export":
 
         for file_path in export_result["exported_files"]:
             st.write(file_path)
+
+
+# -----------------------------
+# Market Universe
+# -----------------------------
+elif mode == "Market Universe":
+    st.subheader("Market Universe")
+
+    st.write(
+        "This page builds a U.S. listed ticker universe from Nasdaq Trader symbol "
+        "directory data. The public scanner still stays capped at 50 tickers."
+    )
+
+    universe_col1, universe_col2, universe_col3 = st.columns(3)
+
+    include_etfs = universe_col1.checkbox(
+        "Include ETFs",
+        value=False,
+        key="market_universe_include_etfs",
+    )
+
+    include_test_issues = universe_col2.checkbox(
+        "Include test issues",
+        value=False,
+        key="market_universe_include_test_issues",
+    )
+
+    include_nextshares = universe_col3.checkbox(
+        "Include NextShares",
+        value=False,
+        key="market_universe_include_nextshares",
+    )
+
+    if st.button("Refresh Market Universe", key="refresh_market_universe"):
+        with st.spinner("Downloading and building market universe..."):
+            universe_df = build_market_universe(
+                include_etfs=include_etfs,
+                include_test_issues=include_test_issues,
+                include_nextshares=include_nextshares,
+            )
+
+            saved_count = save_market_universe(universe_df)
+
+            st.cache_data.clear()
+
+            st.success(f"Saved {saved_count} tickers to data/market_universe.csv")
+
+    market_universe_df = get_cached_market_universe()
+
+    if market_universe_df.empty:
+        st.warning("No market universe file found yet. Click Refresh Market Universe.")
+    else:
+        u1, u2, u3 = st.columns(3)
+
+        u1.metric("Universe Tickers", len(market_universe_df))
+
+        u2.metric(
+            "ETFs",
+            (
+                market_universe_df["is_etf"].astype(str).str.upper().eq("Y").sum()
+                if "is_etf" in market_universe_df.columns
+                else 0
+            ),
+        )
+
+        u3.metric(
+            "Exchanges",
+            (
+                market_universe_df["listing_exchange"].nunique()
+                if "listing_exchange" in market_universe_df.columns
+                else 0
+            ),
+        )
+
+        st.markdown("### Universe Preview")
+
+        st.dataframe(
+            market_universe_df.head(500),
+            width="stretch",
+            hide_index=True,
+        )
+
+        universe_csv = market_universe_df.to_csv(index=False)
+
+        st.download_button(
+            label="Download Market Universe CSV",
+            data=universe_csv,
+            file_name="market_universe.csv",
+            mime="text/csv",
+            key="download_market_universe_csv",
+        )
