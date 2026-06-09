@@ -262,6 +262,33 @@ def format_number(value):
     return f"{value:.2f}"
 
 
+def build_growth_metrics_display_table(
+    growth_metrics: list, ticker: str
+) -> pd.DataFrame:
+    table_rows = []
+
+    for metric in growth_metrics:
+        table_rows.append(
+            {
+                "Metric": metric.get("metric", "N/A"),
+                "Sector Relative Grade": metric.get("sector_relative_grade") or "N/A",
+                ticker: format_growth_percent(metric.get("value")),
+                "Sector Median": format_growth_percent(metric.get("sector_median")),
+                "% Diff. to Sector": format_growth_percent(
+                    metric.get("diff_to_sector")
+                ),
+                f"{ticker} 5Y Avg.": format_growth_percent(
+                    metric.get("five_year_average")
+                ),
+                "% Diff. to 5Y Avg.": format_growth_percent(
+                    metric.get("diff_to_five_year_average")
+                ),
+            }
+        )
+
+    return pd.DataFrame(table_rows)
+
+
 def get_active_institutional_holdings_for_scoring() -> pd.DataFrame:
     """
     Gets the best available institutional holdings data for Single Ticker scoring.
@@ -802,6 +829,19 @@ if mode == "Single Ticker":
                 "Cash Runway",
                 fundamentals.get("cash_runway_label", "N/A"),
             )
+
+            growth_metrics_table = build_growth_metrics_display_table(
+                fundamentals.get("growth_metrics", []),
+                ticker,
+            )
+
+            if not growth_metrics_table.empty:
+                st.markdown("#### Growth Metrics")
+                st.dataframe(
+                    growth_metrics_table,
+                    hide_index=True,
+                    width="stretch",
+                )
 
             fundamental_table = {
                 "Metric": [
