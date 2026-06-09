@@ -13,7 +13,21 @@ NUMERIC_COLUMNS = [
     "institutional_holding_count",
     "institutional_net_qoq_flow_pct",
     "margin_of_safety",
+    "revenue_yoy_growth",
+    "gross_margin",
+    "operating_margin",
+    "net_income_yoy_growth",
+    "return_on_equity",
+    "equity_to_assets",
+    "fcf_margin",
+    "current_ratio",
 ]
+
+SPARSE_FUNDAMENTAL_QUALITIES = {
+    "NO FUNDAMENTALS",
+    "SPARSE",
+    "UNSUPPORTED",
+}
 
 
 def prepare_watchlist_filter_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -52,6 +66,14 @@ def prepare_watchlist_filter_df(df: pd.DataFrame) -> pd.DataFrame:
     if "heartbeat_status" in prepared_df.columns:
         prepared_df["heartbeat_status"] = prepared_df["heartbeat_status"].astype(str)
 
+    if "fundamental_profile" in prepared_df.columns:
+        prepared_df["fundamental_profile"] = prepared_df["fundamental_profile"].astype(str)
+
+    if "fundamental_data_quality" in prepared_df.columns:
+        prepared_df["fundamental_data_quality"] = prepared_df[
+            "fundamental_data_quality"
+        ].astype(str)
+
     return prepared_df
 
 
@@ -67,6 +89,7 @@ def apply_watchlist_filters(
     hide_profit_locker_warning: bool = False,
     require_positive_margin_of_safety: bool = False,
     require_institutional_accumulation: bool = False,
+    hide_sparse_fundamentals: bool = False,
 ) -> pd.DataFrame:
     """
     Applies Watchlist Scanner 2.0 filters.
@@ -128,6 +151,13 @@ def apply_watchlist_filters(
     ):
         filtered_df = filtered_df[
             filtered_df["institutional_net_qoq_flow_pct"].fillna(-999) > 0
+        ]
+
+    if hide_sparse_fundamentals and "fundamental_data_quality" in filtered_df.columns:
+        filtered_df = filtered_df[
+            ~filtered_df["fundamental_data_quality"]
+            .str.upper()
+            .isin(SPARSE_FUNDAMENTAL_QUALITIES)
         ]
 
     return filtered_df
@@ -193,6 +223,10 @@ def get_watchlist_display_columns() -> list:
         "profit_locker_status",
         "chart_score",
         "fundamental_score",
+        "fundamental_profile",
+        "fundamental_data_quality",
+        "sector",
+        "industry",
         "valuation_score",
         "final_smart_money_score",
         "institutional_smart_money_score",
@@ -201,5 +235,12 @@ def get_watchlist_display_columns() -> list:
         "valuation_label",
         "margin_of_safety",
         "heartbeat_status",
+        "revenue_yoy_growth",
+        "gross_margin",
+        "operating_margin",
+        "net_income_yoy_growth",
+        "return_on_equity",
+        "fcf_margin",
+        "missing_fundamental_fields",
         "error",
     ]

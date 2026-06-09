@@ -2,6 +2,34 @@ import pandas as pd
 import yfinance as yf
 
 
+UNSUPPORTED_QUOTE_TYPES = {
+    "ETF",
+    "MUTUALFUND",
+    "FUND",
+    "INDEX",
+    "CRYPTOCURRENCY",
+    "CURRENCY",
+    "FUTURE",
+}
+
+FINANCIAL_SECTOR_NAMES = {
+    "financial services",
+    "financials",
+}
+
+FINANCIAL_INDUSTRY_KEYWORDS = [
+    "bank",
+    "banks",
+    "capital markets",
+    "credit services",
+    "financial",
+    "insurance",
+    "asset management",
+    "mortgage",
+    "brokerage",
+]
+
+
 def safe_float(value):
     """
     Converts a value to float safely.
@@ -61,6 +89,84 @@ def safe_ratio(numerator, denominator):
         return None
 
     return numerator / denominator
+
+
+def normalize_text(value) -> str:
+    if value is None:
+        return ""
+
+    return str(value).strip()
+
+
+def is_financial_profile(info: dict) -> bool:
+    sector = normalize_text(info.get("sector")).lower()
+    industry = normalize_text(info.get("industry")).lower()
+
+    if sector in FINANCIAL_SECTOR_NAMES:
+        return True
+
+    return any(keyword in industry for keyword in FINANCIAL_INDUSTRY_KEYWORDS)
+
+
+def get_fundamental_profile(info: dict) -> str:
+    quote_type = normalize_text(info.get("quoteType")).upper()
+
+    if quote_type in UNSUPPORTED_QUOTE_TYPES:
+        return "Unsupported"
+
+    if is_financial_profile(info):
+        return "Financial"
+
+    return "Operating"
+
+
+def build_fundamental_data_quality(fundamentals: dict) -> dict:
+    profile = fundamentals.get("fundamental_profile", "Operating")
+
+    if profile == "Financial":
+        required_fields = [
+            "revenue",
+            "revenue_yoy_growth",
+            "net_income",
+            "net_income_yoy_growth",
+            "return_on_equity",
+            "equity_to_assets",
+        ]
+    elif profile == "Unsupported":
+        required_fields = ["revenue", "net_income"]
+    else:
+        required_fields = [
+            "revenue",
+            "revenue_yoy_growth",
+            "gross_margin",
+            "operating_margin",
+            "fcf_margin",
+            "current_ratio",
+            "debt_to_equity",
+        ]
+
+    missing_fields = [
+        field for field in required_fields if fundamentals.get(field) is None
+    ]
+    available_count = len(required_fields) - len(missing_fields)
+
+    if profile == "Unsupported":
+        quality = "Unsupported"
+    elif available_count == len(required_fields):
+        quality = "Complete"
+    elif available_count >= max(3, int(len(required_fields) * 0.6)):
+        quality = "Partial"
+    elif available_count > 0:
+        quality = "Sparse"
+    else:
+        quality = "No fundamentals"
+
+    return {
+        "fundamental_data_quality": quality,
+        "missing_fundamental_fields": ", ".join(missing_fields),
+        "available_fundamental_fields": available_count,
+        "required_fundamental_fields": len(required_fields),
+    }
 
 
 def normalize_growth_to_percent(value):
@@ -678,6 +784,10 @@ def load_fundamentals(ticker: str) -> dict:
     trailing_eps = safe_float(info.get("trailingEps"))
     forward_eps = safe_float(info.get("forwardEps"))
     market_cap = safe_float(info.get("marketCap"))
+    sector = normalize_text(info.get("sector")) or "N/A"
+    industry = normalize_text(info.get("industry")) or "N/A"
+    quote_type = normalize_text(info.get("quoteType")) or "N/A"
+    fundamental_profile = get_fundamental_profile(info)
 
     try:
         quarterly_income = stock.quarterly_financials
@@ -729,6 +839,33 @@ def load_fundamentals(ticker: str) -> dict:
         quarterly_income, ["Operating Income", "Operating Income or Loss"]
     )
 
+    net_income = get_statement_value(
+        quarterly_income,
+        [
+            "Net Income Common Stockholders",
+            "Net Income Applicable To Common Shares",
+            "Net Income",
+        ],
+    )
+
+    net_income_year_ago = None
+    if (
+        quarterly_income is not None
+        and not quarterly_income.empty
+        and quarterly_income.shape[1] >= 5
+    ):
+        net_income_year_ago = get_statement_value(
+            quarterly_income,
+            [
+                "Net Income Common Stockholders",
+                "Net Income Applicable To Common Shares",
+                "Net Income",
+            ],
+            column_position=4,
+        )
+
+    net_income_yoy_growth = percent_change(net_income, net_income_year_ago)
+
     gross_margin = safe_ratio(gross_profit, revenue)
     operating_margin = safe_ratio(operating_income, revenue)
 
@@ -773,8 +910,16 @@ def load_fundamentals(ticker: str) -> dict:
         quarterly_balance, ["Current Liabilities", "Total Current Liabilities"]
     )
 
+    total_assets = get_statement_value(quarterly_balance, ["Total Assets"])
+
     debt_to_equity = safe_ratio(total_debt, stockholders_equity)
     current_ratio = safe_ratio(current_assets, current_liabilities)
+    return_on_equity = safe_ratio(
+        None if net_income is None else net_income * 4,
+        stockholders_equity,
+    )
+    equity_to_assets = safe_ratio(stockholders_equity, total_assets)
+    cash_to_debt = safe_ratio(cash, total_debt)
 
     # -----------------------------
     # Cash runway
@@ -810,14 +955,20 @@ def load_fundamentals(ticker: str) -> dict:
         revenue_yoy_growth=revenue_yoy_growth,
     )
 
-    return {
+    fundamentals = {
         "ticker": ticker.upper(),
+        "sector": sector,
+        "industry": industry,
+        "quote_type": quote_type,
+        "fundamental_profile": fundamental_profile,
         "revenue": revenue,
         "revenue_yoy_growth": revenue_yoy_growth,
         "gross_profit": gross_profit,
         "gross_margin": gross_margin,
         "operating_income": operating_income,
         "operating_margin": operating_margin,
+        "net_income": net_income,
+        "net_income_yoy_growth": net_income_yoy_growth,
         "operating_cash_flow": operating_cash_flow,
         "capital_expenditure": capital_expenditure,
         "free_cash_flow": free_cash_flow,
@@ -825,10 +976,14 @@ def load_fundamentals(ticker: str) -> dict:
         "cash": cash,
         "total_debt": total_debt,
         "stockholders_equity": stockholders_equity,
+        "total_assets": total_assets,
         "debt_to_equity": debt_to_equity,
         "current_assets": current_assets,
         "current_liabilities": current_liabilities,
         "current_ratio": current_ratio,
+        "return_on_equity": return_on_equity,
+        "equity_to_assets": equity_to_assets,
+        "cash_to_debt": cash_to_debt,
         "annualized_fcf": annualized_fcf,
         "cash_runway_years": cash_runway_years,
         "cash_runway_label": cash_runway_label,
@@ -839,11 +994,92 @@ def load_fundamentals(ticker: str) -> dict:
         "growth_metrics": growth_metrics,
     }
 
+    fundamentals.update(build_fundamental_data_quality(fundamentals))
+
+    return fundamentals
+
+
+def calculate_financial_fundamental_score(fundamentals: dict) -> int:
+    """
+    Scores banks and financial companies with metrics that fit their statements.
+    """
+
+    score = 0
+
+    revenue_growth = fundamentals.get("revenue_yoy_growth")
+    net_income_growth = fundamentals.get("net_income_yoy_growth")
+    return_on_equity = fundamentals.get("return_on_equity")
+    equity_to_assets = fundamentals.get("equity_to_assets")
+    debt_to_equity = fundamentals.get("debt_to_equity")
+    cash_to_debt = fundamentals.get("cash_to_debt")
+
+    if revenue_growth is not None:
+        if revenue_growth >= 15:
+            score += 20
+        elif revenue_growth >= 7:
+            score += 15
+        elif revenue_growth >= 0:
+            score += 8
+
+    if net_income_growth is not None:
+        if net_income_growth >= 25:
+            score += 25
+        elif net_income_growth >= 10:
+            score += 18
+        elif net_income_growth >= 0:
+            score += 10
+
+    if return_on_equity is not None:
+        if return_on_equity >= 0.15:
+            score += 25
+        elif return_on_equity >= 0.10:
+            score += 18
+        elif return_on_equity >= 0.05:
+            score += 10
+        elif return_on_equity > 0:
+            score += 5
+
+    if equity_to_assets is not None:
+        if equity_to_assets >= 0.12:
+            score += 15
+        elif equity_to_assets >= 0.08:
+            score += 10
+        elif equity_to_assets >= 0.05:
+            score += 6
+        elif equity_to_assets > 0:
+            score += 3
+
+    if debt_to_equity is not None:
+        if debt_to_equity <= 3:
+            score += 10
+        elif debt_to_equity <= 6:
+            score += 7
+        elif debt_to_equity <= 10:
+            score += 4
+
+    if cash_to_debt is not None:
+        if cash_to_debt >= 0.50:
+            score += 5
+        elif cash_to_debt >= 0.20:
+            score += 3
+        elif cash_to_debt >= 0.10:
+            score += 1
+
+    return max(0, min(score, 100))
+
 
 def calculate_fundamental_score(fundamentals: dict) -> int:
     """
     Scores the company's fundamentals from 0 to 100.
     """
+
+    profile = fundamentals.get("fundamental_profile", "Operating")
+
+    if profile == "Financial":
+        return calculate_financial_fundamental_score(fundamentals)
+
+    if profile == "Unsupported":
+        return 0
 
     score = 0
 

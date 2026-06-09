@@ -13,6 +13,7 @@ from src.market_universe import (
     save_market_universe,
     load_market_universe,
     load_market_universe_tickers,
+    filter_supported_tickers,
 )
 from src.database import load_scan_history, load_latest_scan
 from src.fundamentals import load_fundamentals, calculate_fundamental_score
@@ -176,8 +177,14 @@ def get_cached_market_universe():
 
 
 @st.cache_data(ttl=3600)
-def get_cached_market_universe_tickers(max_tickers: int):
-    return load_market_universe_tickers(max_tickers=max_tickers)
+def get_cached_market_universe_tickers(
+    max_tickers: int,
+    supported_common_only: bool = False,
+):
+    return load_market_universe_tickers(
+        max_tickers=max_tickers,
+        supported_common_only=supported_common_only,
+    )
 
 
 @st.cache_data(ttl=300)
@@ -830,6 +837,33 @@ if mode == "Single Ticker":
                 fundamentals.get("cash_runway_label", "N/A"),
             )
 
+            q1, q2, q3, q4 = st.columns(4)
+
+            q1.metric(
+                "Fundamental Profile",
+                fundamentals.get("fundamental_profile", "N/A"),
+            )
+
+            q2.metric(
+                "Data Quality",
+                fundamentals.get("fundamental_data_quality", "N/A"),
+            )
+
+            q3.metric(
+                "Sector",
+                fundamentals.get("sector", "N/A"),
+            )
+
+            q4.metric(
+                "ROE",
+                format_percent(fundamentals.get("return_on_equity")),
+            )
+
+            missing_fundamental_fields = fundamentals.get("missing_fundamental_fields")
+
+            if missing_fundamental_fields:
+                st.caption(f"Missing fundamental fields: {missing_fundamental_fields}")
+
             growth_metrics_table = build_growth_metrics_display_table(
                 fundamentals.get("growth_metrics", []),
                 ticker,
@@ -860,6 +894,17 @@ if mode == "Single Ticker":
                     "Debt / Equity",
                     "Current Ratio",
                     "Cash Runway",
+                    "Fundamental Profile",
+                    "Data Quality",
+                    "Sector",
+                    "Industry",
+                    "Quote Type",
+                    "Net Income",
+                    "Net Income YoY Growth",
+                    "Return on Equity",
+                    "Equity / Assets",
+                    "Cash / Debt",
+                    "Missing Fundamental Fields",
                     "Fundamental Score",
                 ],
                 "Value": [
@@ -878,6 +923,17 @@ if mode == "Single Ticker":
                     format_number(fundamentals.get("debt_to_equity")),
                     format_number(fundamentals.get("current_ratio")),
                     fundamentals.get("cash_runway_label", "N/A"),
+                    fundamentals.get("fundamental_profile", "N/A"),
+                    fundamentals.get("fundamental_data_quality", "N/A"),
+                    fundamentals.get("sector", "N/A"),
+                    fundamentals.get("industry", "N/A"),
+                    fundamentals.get("quote_type", "N/A"),
+                    format_money(fundamentals.get("net_income")),
+                    format_growth_percent(fundamentals.get("net_income_yoy_growth")),
+                    format_percent(fundamentals.get("return_on_equity")),
+                    format_percent(fundamentals.get("equity_to_assets")),
+                    format_percent(fundamentals.get("cash_to_debt")),
+                    fundamentals.get("missing_fundamental_fields", ""),
                     f"{fundamental_score}/100",
                 ],
             }
@@ -1108,13 +1164,30 @@ elif mode == "Watchlist Scanner":
             key="max_scan_tickers",
         )
 
+        exclude_unsupported_tickers = st.checkbox(
+            "Exclude ETFs, warrants, rights, funds, and units",
+            value=True,
+            key="scanner_exclude_unsupported_tickers",
+        )
+
+        excluded_scan_tickers = []
+
         if scanner_source == "Manual Watchlist":
             scanner_ticker_source = "data/watchlist.csv"
             available_scan_tickers = manual_watchlist_tickers
+
+            if exclude_unsupported_tickers:
+                available_scan_tickers, excluded_scan_tickers = (
+                    filter_supported_tickers(
+                        available_scan_tickers,
+                        get_cached_market_universe(),
+                    )
+                )
         else:
             scanner_ticker_source = "data/market_universe.csv"
             available_scan_tickers = get_cached_market_universe_tickers(
                 max_tickers=PUBLIC_MAX_SCAN_TICKERS,
+                supported_common_only=exclude_unsupported_tickers,
             )
 
         selected_universe_tickers = available_scan_tickers[: int(max_scan_tickers)]
@@ -1133,6 +1206,12 @@ elif mode == "Watchlist Scanner":
                 f"Loaded {len(available_scan_tickers)} tickers from {scanner_ticker_source}. "
                 f"Public scans are capped at {PUBLIC_MAX_SCAN_TICKERS} tickers."
             )
+
+            if excluded_scan_tickers:
+                st.caption(
+                    "Excluded unsupported scanner symbols: "
+                    + ", ".join(excluded_scan_tickers[:12])
+                )
 
             selected_scan_tickers = st.multiselect(
                 "Choose tickers to scan",
@@ -1223,7 +1302,9 @@ elif mode == "Watchlist Scanner":
             get_active_institutional_holdings_for_scoring()
         )
 
-        scanner_info_col1, scanner_info_col2, scanner_info_col3 = st.columns(3)
+        scanner_info_col1, scanner_info_col2, scanner_info_col3, scanner_info_col4 = (
+            st.columns(4)
+        )
 
         scanner_info_col1.metric(
             "Selected Tickers",
@@ -1238,6 +1319,11 @@ elif mode == "Watchlist Scanner":
         scanner_info_col3.metric(
             "Manual Smart Money",
             f"{manual_scanner_smart_money_score}/5",
+        )
+
+        scanner_info_col4.metric(
+            "Excluded Symbols",
+            len(excluded_scan_tickers),
         )
 
         if st.button("Run Full Watchlist Scan", key="run_full_watchlist_scan"):
@@ -1342,8 +1428,15 @@ elif mode == "Watchlist Scanner":
                 key="watchlist_sort_option",
             )
 
-            toggle_col1, toggle_col2, toggle_col3, toggle_col4, toggle_col5 = (
-                st.columns(5)
+            (
+                toggle_col1,
+                toggle_col2,
+                toggle_col3,
+                toggle_col4,
+                toggle_col5,
+                toggle_col6,
+            ) = (
+                st.columns(6)
             )
 
             require_ok_status_filter = toggle_col1.checkbox(
@@ -1376,6 +1469,12 @@ elif mode == "Watchlist Scanner":
                 key="filter_institutional_accumulation",
             )
 
+            hide_sparse_fundamentals_filter = toggle_col6.checkbox(
+                "Hide sparse fundamentals",
+                value=False,
+                key="filter_hide_sparse_fundamentals",
+            )
+
             ascending_sort = st.checkbox(
                 "Sort ascending instead of descending",
                 value=False,
@@ -1394,6 +1493,7 @@ elif mode == "Watchlist Scanner":
                 hide_profit_locker_warning=hide_profit_locker_filter,
                 require_positive_margin_of_safety=require_positive_margin_filter,
                 require_institutional_accumulation=require_institutional_accumulation_filter,
+                hide_sparse_fundamentals=hide_sparse_fundamentals_filter,
             )
 
             filtered_scan_df = sort_watchlist_results(
@@ -1426,6 +1526,21 @@ elif mode == "Watchlist Scanner":
                 "Top Final Score",
                 f"{top_score:.0f}",
             )
+
+            if "fundamental_data_quality" in filtered_scan_df.columns:
+                quality_counts = (
+                    filtered_scan_df["fundamental_data_quality"]
+                    .fillna("Unknown")
+                    .astype(str)
+                    .value_counts()
+                    .to_dict()
+                )
+                quality_summary = ", ".join(
+                    f"{quality}: {count}" for quality, count in quality_counts.items()
+                )
+
+                if quality_summary:
+                    st.caption(f"Fundamental data quality: {quality_summary}")
 
             preferred_columns = get_watchlist_display_columns()
 

@@ -5,6 +5,22 @@ import pandas as pd
 NASDAQ_TRADED_URL = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqtraded.txt"
 DEFAULT_UNIVERSE_PATH = Path("data/market_universe.csv")
 
+UNSUPPORTED_SECURITY_KEYWORDS = [
+    "warrant",
+    "rights",
+    "right to",
+    "unit",
+    "units",
+    "preferred",
+    "preference",
+    "etf",
+    "etn",
+    "fund",
+    "notes due",
+    "senior notes",
+    "subordinated notes",
+]
+
 
 def clean_symbol(symbol: str) -> str:
     symbol = str(symbol).strip().upper()
@@ -88,6 +104,87 @@ def build_market_universe(
     return df[required_columns]
 
 
+def is_supported_common_stock_row(row) -> bool:
+    ticker = clean_symbol(row.get("ticker", ""))
+    security_name = str(row.get("security_name", "")).strip().lower()
+
+    if not ticker or "$" in ticker:
+        return False
+
+    if str(row.get("is_etf", "")).strip().upper() == "Y":
+        return False
+
+    if str(row.get("is_test_issue", "")).strip().upper() == "Y":
+        return False
+
+    if str(row.get("is_nextshares", "")).strip().upper() == "Y":
+        return False
+
+    if any(keyword in security_name for keyword in UNSUPPORTED_SECURITY_KEYWORDS):
+        if "common stock" not in security_name:
+            return False
+
+        if any(
+            keyword in security_name
+            for keyword in ["warrant", "rights", "unit", "preferred", "fund", "etf"]
+        ):
+            return False
+
+    return True
+
+
+def filter_supported_common_stocks(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    working_df = df.copy()
+
+    for column in [
+        "ticker",
+        "security_name",
+        "is_etf",
+        "is_test_issue",
+        "is_nextshares",
+    ]:
+        if column not in working_df.columns:
+            working_df[column] = ""
+
+    supported_mask = working_df.apply(is_supported_common_stock_row, axis=1)
+
+    return working_df[supported_mask].reset_index(drop=True)
+
+
+def filter_supported_tickers(
+    tickers: list[str], universe_df: pd.DataFrame
+) -> tuple[list[str], list[str]]:
+    if not tickers:
+        return [], []
+
+    if universe_df is None or universe_df.empty or "ticker" not in universe_df.columns:
+        return tickers, []
+
+    universe_df = universe_df.copy()
+    universe_df["ticker"] = universe_df["ticker"].apply(clean_symbol)
+
+    known_tickers = set(universe_df["ticker"].dropna().astype(str))
+    supported_tickers = set(
+        filter_supported_common_stocks(universe_df)["ticker"].dropna().astype(str)
+    )
+
+    kept_tickers = []
+    excluded_tickers = []
+
+    for ticker in tickers:
+        clean_ticker = clean_symbol(ticker)
+
+        if clean_ticker in known_tickers and clean_ticker not in supported_tickers:
+            excluded_tickers.append(clean_ticker)
+        else:
+            kept_tickers.append(clean_ticker)
+
+    return kept_tickers, excluded_tickers
+
+
 def save_market_universe(
     universe_df: pd.DataFrame,
     path: Path = DEFAULT_UNIVERSE_PATH,
@@ -110,11 +207,15 @@ def load_market_universe(
 def load_market_universe_tickers(
     path: Path = DEFAULT_UNIVERSE_PATH,
     max_tickers: int | None = None,
+    supported_common_only: bool = False,
 ) -> list[str]:
     df = load_market_universe(path)
 
     if df.empty or "ticker" not in df.columns:
         return []
+
+    if supported_common_only:
+        df = filter_supported_common_stocks(df)
 
     tickers = (
         df["ticker"]
