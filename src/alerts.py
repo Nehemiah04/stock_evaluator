@@ -1,7 +1,6 @@
 import pandas as pd
 import plotly.graph_objects as go
 
-
 ALERT_COLUMNS = [
     "ticker",
     "alert_level",
@@ -157,7 +156,12 @@ def generate_alerts_for_stock(row: pd.Series) -> list:
             )
         )
 
-    if final_score >= 75 and distance_from_150dma >= 0 and distance_from_150dma < 25 and institutional_score >= 0:
+    if (
+        final_score >= 75
+        and distance_from_150dma >= 0
+        and distance_from_150dma < 25
+        and institutional_score >= 0
+    ):
         alerts.append(
             build_alert_row(
                 row,

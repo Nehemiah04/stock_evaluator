@@ -473,16 +473,11 @@ def build_live_institutional_holdings(
     return live_df
 
 
-def fetch_sec_13f_holdings_placeholder() -> pd.DataFrame:
+def fetch_sec_13f_holdings(manager_limit: int = 5) -> pd.DataFrame:
     """
-    Placeholder for a direct SEC 13F bulk-data connector.
-
-    SEC 13F is official but requires:
-    - manager CIK mapping
-    - 13F filing parsing
-    - CUSIP-to-ticker mapping
-    - ticker-to-sector mapping
-    - QoQ change calculation
+    Fetches official SEC 13F holdings using the free EDGAR connector.
     """
 
-    return pd.DataFrame(columns=TARGET_COLUMNS)
+    from src.sec_13f_connector import build_sec_13f_holdings
+
+    return build_sec_13f_holdings(manager_limit=manager_limit)

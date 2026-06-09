@@ -10,3 +10,20 @@ exports/
 logs/
 .streamlit/secrets.toml
 .env
+
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+.env
+
+# Local app data
+logs/
+data/exports/
+data/research_workspace/
+data/stocks.db
+
+# Streamlit secrets
+.streamlit/secrets.toml

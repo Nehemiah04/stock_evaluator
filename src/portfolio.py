@@ -69,8 +69,19 @@ def build_portfolio_dashboard(
         errors="coerce",
     ).fillna(0)
 
+    # If average_cost is 0 or blank, use current market price as a placeholder.
+    # This keeps real cost basis fixed when provided, but makes paper/test portfolios dynamic.
+    merged["effective_average_cost"] = merged["average_cost"]
+
+    missing_cost_mask = merged["effective_average_cost"] <= 0
+
+    merged.loc[missing_cost_mask, "effective_average_cost"] = merged.loc[
+        missing_cost_mask,
+        "current_price",
+    ]
+
     merged["market_value"] = merged["shares"] * merged["current_price"]
-    merged["cost_basis"] = merged["shares"] * merged["average_cost"]
+    merged["cost_basis"] = merged["shares"] * merged["effective_average_cost"]
     merged["unrealized_gain_loss"] = merged["market_value"] - merged["cost_basis"]
 
     merged["unrealized_gain_loss_pct"] = 0.0
@@ -161,6 +172,7 @@ def get_portfolio_display_columns() -> list:
         "ticker",
         "shares",
         "average_cost",
+        "effective_average_cost",
         "current_price",
         "market_value",
         "cost_basis",

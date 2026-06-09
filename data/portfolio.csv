@@ -1,4 +1,38 @@
 ticker,shares,average_cost,notes
-NVDA,1,100,AI infrastructure core holding
-MSFT,1,300,Platform and cloud holding
-AVGO,1,900,AI networking and custom silicon
+MU,1,864.01,Micron memory and HBM holding
+RKLB,1,110.08,Rocket Lab space infrastructure holding
+ASTS,1,93.60,AST SpaceMobile satellite connectivity holding
+IONQ,1,56.78,IonQ quantum computing holding
+CORZ,1,25.85,Core Scientific AI data center holding
+BETA,1,17.13,Beta Technologies aviation electrification holding
+DT,1,42.19,Dynatrace observability software holding
+TENB,1,27.85,Tenable cybersecurity holding
+TXG,1,31.04,10x Genomics life sciences tools holding
+CELH,1,28.13,Celsius consumer growth holding
+NFLX,1,82.18,Netflix streaming and media holding
+ISRG,1,422.06,Intuitive Surgical robotics healthcare holding
+TMUS,1,178.10,T-Mobile telecom holding
+LITE,1,863.66,Lumentum optical components holding
+CIEN,1,488.21,Ciena networking infrastructure holding
+STX,1,847.47,Seagate storage holding
+ADBE,1,251.44,Adobe software holding
+WDC,1,511.72,Western Digital storage holding
+CRDO,1,206.89,Credo connectivity semiconductor holding
+ALAB,1,317.06,Astera Labs AI connectivity holding
+CEG,1,254.83,Constellation Energy power infrastructure holding
+TLN,1,364.74,Talen Energy power infrastructure holding
+BE,1,263.61,Bloom Energy power and fuel cell holding
+POWL,1,284.87,Powell electrical infrastructure holding
+MRVL,1,263.47,Marvell AI semiconductor holding
+ALOY,1,12.48,REalloys rare earth materials holding
+GS,1,1038.68,Goldman Sachs financials holding
+JPM,1,312.37,JPMorgan Chase financials holding
+BAC,1,53.83,Bank of America financials holding
+WFC,1,81.94,Wells Fargo financials holding
+C,1,132.47,Citigroup financials holding
+PYPL,1,41.29,PayPal fintech holding
+SNOW,1,238.26,Snowflake data cloud holding
+WDAY,1,144.28,Workday enterprise software holding
+MDB,1,350.74,MongoDB database software holding
+OKTA,1,118.72,Okta identity security holding
+GENB,1,12.87,Generate Biomedicines biotech holding
