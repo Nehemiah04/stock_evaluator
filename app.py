@@ -110,9 +110,11 @@ st.set_page_config(
 )
 
 st.title("Stock Evaluator Dashboard")
-st.caption("Version 1: 150DMA Heartbeat + Profit Locker")
+st.caption("Version 1: Moving Average Heartbeat + Profit Locker")
 
 PUBLIC_MAX_SCAN_TICKERS = 50
+SINGLE_TICKER_LONG_DMA_PERIOD = 200
+SINGLE_TICKER_LONG_DMA_LABEL = f"{SINGLE_TICKER_LONG_DMA_PERIOD}DMA"
 
 
 # -----------------------------
@@ -350,9 +352,12 @@ mode = st.sidebar.radio(
 
 st.sidebar.markdown("---")
 st.sidebar.write("Core rules:")
-st.sidebar.write("150DMA = heartbeat")
-st.sidebar.write("25%+ above 150DMA = caution")
-st.sidebar.write("35%+ above 150DMA = profit locker")
+active_long_dma_label = (
+    SINGLE_TICKER_LONG_DMA_LABEL if mode == "Single Ticker" else "150DMA"
+)
+st.sidebar.write(f"{active_long_dma_label} = heartbeat")
+st.sidebar.write(f"25%+ above {active_long_dma_label} = caution")
+st.sidebar.write(f"35%+ above {active_long_dma_label} = profit locker")
 
 with st.sidebar.expander("Notion Export", expanded=False):
     notion_destination_type = st.selectbox(
@@ -441,10 +446,18 @@ if mode == "Single Ticker":
     else:
         data = get_cached_price_data(ticker)
 
-        if data.empty or len(data) < 160:
+        if data.empty or len(data) < SINGLE_TICKER_LONG_DMA_PERIOD + 30:
             st.error("Not enough price data found for this ticker.")
         else:
-            metrics = calculate_heartbeat(data)
+            data = data.copy()
+            data[SINGLE_TICKER_LONG_DMA_LABEL] = data["Close"].rolling(
+                window=SINGLE_TICKER_LONG_DMA_PERIOD
+            ).mean()
+
+            metrics = calculate_heartbeat(
+                data,
+                long_dma_column=SINGLE_TICKER_LONG_DMA_LABEL,
+            )
             chart_score = calculate_chart_score(metrics)
             action_label = get_action_label(metrics, chart_score)
 
@@ -622,6 +635,7 @@ if mode == "Single Ticker":
                 chart_action_label=action_label,
                 valuation_label=valuation.get("valuation_label", "N/A"),
                 profit_locker_status=metrics["profit_locker_status"],
+                long_dma_label=SINGLE_TICKER_LONG_DMA_LABEL,
             )
 
             # -----------------------------
@@ -685,13 +699,13 @@ if mode == "Single Ticker":
             )
 
             col2.metric(
-                "150DMA",
-                f"${metrics['dma_150']:,.2f}",
+                SINGLE_TICKER_LONG_DMA_LABEL,
+                f"${metrics['long_dma']:,.2f}",
             )
 
             col3.metric(
-                "Distance from 150DMA",
-                f"{metrics['distance_from_150dma']:.2f}%",
+                f"Distance from {SINGLE_TICKER_LONG_DMA_LABEL}",
+                f"{metrics['distance_from_long_dma']:.2f}%",
             )
 
             col4.metric(
@@ -730,14 +744,17 @@ if mode == "Single Ticker":
             fig.add_trace(
                 go.Scatter(
                     x=data.index,
-                    y=data["150DMA"],
+                    y=data[SINGLE_TICKER_LONG_DMA_LABEL],
                     mode="lines",
-                    name="150DMA",
+                    name=SINGLE_TICKER_LONG_DMA_LABEL,
                 )
             )
 
             fig.update_layout(
-                title=f"{ticker} Price vs 50DMA and 150DMA",
+                title=(
+                    f"{ticker} Price vs 50DMA and "
+                    f"{SINGLE_TICKER_LONG_DMA_LABEL}"
+                ),
                 xaxis_title="Date",
                 yaxis_title="Price",
                 height=650,
@@ -757,7 +774,7 @@ if mode == "Single Ticker":
                     "Final Label",
                     "Final Action",
                     "Chart Heartbeat",
-                    "150DMA Status",
+                    f"{SINGLE_TICKER_LONG_DMA_LABEL} Status",
                     "Profit Locker",
                     "Chart Action Label",
                     "Chart Score",
@@ -773,7 +790,10 @@ if mode == "Single Ticker":
                     final_label,
                     final_action,
                     metrics["heartbeat_status"],
-                    f"{metrics['distance_from_150dma']:.2f}% from 150DMA",
+                    (
+                        f"{metrics['distance_from_long_dma']:.2f}% from "
+                        f"{SINGLE_TICKER_LONG_DMA_LABEL}"
+                    ),
                     metrics["profit_locker_status"],
                     action_label,
                     f"{chart_score}/100",

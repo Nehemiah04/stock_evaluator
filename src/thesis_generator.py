@@ -22,19 +22,30 @@ def format_score(value, denominator=100):
         return f"N/A/{denominator}"
 
 
-def get_chart_read(metrics: dict, chart_score: float) -> str:
-    distance = safe_get(metrics, "distance_from_150dma", 0)
-    heartbeat_status = safe_get(metrics, "heartbeat_status", "N/A")
-    profit_locker_status = safe_get(metrics, "profit_locker_status", "N/A")
+def get_long_dma_context(metrics: dict) -> tuple[str, float]:
+    label = safe_get(metrics, "long_dma_label", "150DMA")
+    distance = safe_get(
+        metrics,
+        "distance_from_long_dma",
+        safe_get(metrics, "distance_from_150dma", 0),
+    )
 
     try:
         distance = float(distance)
     except Exception:
         distance = 0
 
+    return str(label), distance
+
+
+def get_chart_read(metrics: dict, chart_score: float) -> str:
+    long_dma_label, distance = get_long_dma_context(metrics)
+    heartbeat_status = safe_get(metrics, "heartbeat_status", "N/A")
+    profit_locker_status = safe_get(metrics, "profit_locker_status", "N/A")
+
     if distance >= 35:
         return (
-            f"The chart is very extended at {distance:.2f}% above the 150DMA. "
+            f"The chart is very extended at {distance:.2f}% above the {long_dma_label}. "
             "This supports a Profit Locker review. "
             f"Heartbeat status: {heartbeat_status}. "
             f"Profit Locker status: {profit_locker_status}."
@@ -42,20 +53,20 @@ def get_chart_read(metrics: dict, chart_score: float) -> str:
 
     if distance >= 25:
         return (
-            f"The chart is strong but extended at {distance:.2f}% above the 150DMA. "
+            f"The chart is strong but extended at {distance:.2f}% above the {long_dma_label}. "
             "This is a caution zone where new buying may carry weaker risk/reward. "
             f"Heartbeat status: {heartbeat_status}."
         )
 
     if distance >= 0:
         return (
-            f"The stock is trading above the 150DMA by {distance:.2f}%, "
+            f"The stock is trading above the {long_dma_label} by {distance:.2f}%, "
             "which means the main heartbeat trend is intact. "
             f"Chart score: {format_score(chart_score)}."
         )
 
     return (
-        f"The stock is trading {abs(distance):.2f}% below the 150DMA, "
+        f"The stock is trading {abs(distance):.2f}% below the {long_dma_label}, "
         "which means the heartbeat trend is weak or broken. "
         f"Chart score: {format_score(chart_score)}."
     )
@@ -145,18 +156,13 @@ def generate_stock_thesis(
     final_label: str,
     final_action: str,
 ) -> dict:
-    distance = safe_get(metrics, "distance_from_150dma", 0)
+    long_dma_label, distance = get_long_dma_context(metrics)
     valuation_score = safe_get(valuation, "valuation_score", 0)
     institutional_score = safe_get(
         institutional_smart_money,
         "institutional_smart_money_score",
         0,
     )
-
-    try:
-        distance = float(distance)
-    except Exception:
-        distance = 0
 
     try:
         valuation_score = float(valuation_score)
@@ -175,7 +181,7 @@ def generate_stock_thesis(
 
     if chart_score >= 70:
         bull_points.append(
-            "The chart trend is constructive based on the 150DMA heartbeat system."
+            f"The chart trend is constructive based on the {long_dma_label} heartbeat system."
         )
 
     if fundamental_score >= 70:
@@ -200,11 +206,12 @@ def generate_stock_thesis(
 
     if distance >= 35:
         bear_points.append(
-            "The stock is in the Profit Locker zone and may be overextended above the 150DMA."
+            "The stock is in the Profit Locker zone and may be overextended "
+            f"above the {long_dma_label}."
         )
     elif distance >= 25:
         bear_points.append(
-            "The stock is extended above the 150DMA, making entry timing riskier."
+            f"The stock is extended above the {long_dma_label}, making entry timing riskier."
         )
 
     if valuation_score <= 40:
@@ -231,7 +238,7 @@ def generate_stock_thesis(
     )
 
     tracking_metrics = [
-        "Distance from 150DMA",
+        f"Distance from {long_dma_label}",
         "Profit Locker status",
         "Revenue growth",
         "Operating margin",

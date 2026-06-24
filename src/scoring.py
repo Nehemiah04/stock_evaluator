@@ -1,51 +1,71 @@
 import pandas as pd
 
 
-def calculate_heartbeat(data: pd.DataFrame) -> dict:
+def calculate_heartbeat(
+    data: pd.DataFrame,
+    long_dma_column: str = "150DMA",
+) -> dict:
     """
-    Calculates the stock's chart heartbeat using the 50DMA and 150DMA.
+    Calculates the stock's chart heartbeat using the 50DMA and a long-term DMA.
+
+    The 150DMA remains the default so watchlists, scans, and monitoring retain
+    their existing behavior. Callers can select another precomputed moving
+    average column when needed.
     """
 
     current_price = float(data["Close"].iloc[-1])
     dma_50 = float(data["50DMA"].iloc[-1])
-    dma_150 = float(data["150DMA"].iloc[-1])
+    long_dma = float(data[long_dma_column].iloc[-1])
 
-    distance_from_150dma = ((current_price - dma_150) / dma_150) * 100
+    distance_from_long_dma = ((current_price - long_dma) / long_dma) * 100
 
-    dma_150_30_days_ago = float(data["150DMA"].iloc[-30])
-    dma_150_slope = dma_150 - dma_150_30_days_ago
+    long_dma_30_days_ago = float(data[long_dma_column].iloc[-30])
+    long_dma_slope = long_dma - long_dma_30_days_ago
 
-    if current_price > dma_150 and dma_150_slope > 0:
+    if current_price > long_dma and long_dma_slope > 0:
         heartbeat_status = "Healthy uptrend"
-    elif current_price > dma_150 and dma_150_slope <= 0:
+    elif current_price > long_dma and long_dma_slope <= 0:
         heartbeat_status = "Improving, but not confirmed"
-    elif current_price < dma_150 and dma_150_slope > 0:
-        heartbeat_status = "Warning: price below rising 150DMA"
-    elif current_price < dma_150 and dma_150_slope <= 0:
+    elif current_price < long_dma and long_dma_slope > 0:
+        heartbeat_status = f"Warning: price below rising {long_dma_column}"
+    elif current_price < long_dma and long_dma_slope <= 0:
         heartbeat_status = "Broken trend"
     else:
         heartbeat_status = "Neutral"
 
-    if distance_from_150dma >= 35:
+    if distance_from_long_dma >= 35:
         profit_locker_status = "Red: extremely extended"
-    elif distance_from_150dma >= 25:
+    elif distance_from_long_dma >= 25:
         profit_locker_status = "Orange: overextended"
-    elif distance_from_150dma >= 15:
+    elif distance_from_long_dma >= 15:
         profit_locker_status = "Yellow: extended"
-    elif current_price < dma_150:
+    elif current_price < long_dma:
         profit_locker_status = "Red: trend risk"
     else:
         profit_locker_status = "Green: trend intact"
 
-    return {
+    metrics = {
         "current_price": current_price,
         "dma_50": dma_50,
-        "dma_150": dma_150,
-        "distance_from_150dma": distance_from_150dma,
-        "dma_150_slope": dma_150_slope,
+        "long_dma": long_dma,
+        "long_dma_label": long_dma_column,
+        "distance_from_long_dma": distance_from_long_dma,
+        "long_dma_slope": long_dma_slope,
         "heartbeat_status": heartbeat_status,
         "profit_locker_status": profit_locker_status,
     }
+
+    # Preserve the established data contract for every existing 150DMA caller.
+    if long_dma_column == "150DMA":
+        metrics.update(
+            {
+                "dma_150": long_dma,
+                "distance_from_150dma": distance_from_long_dma,
+                "dma_150_slope": long_dma_slope,
+            }
+        )
+
+    return metrics
 
 
 def calculate_chart_score(metrics: dict) -> int:
@@ -56,18 +76,21 @@ def calculate_chart_score(metrics: dict) -> int:
     score = 0
 
     current_price = metrics["current_price"]
-    dma_150 = metrics["dma_150"]
-    distance = metrics["distance_from_150dma"]
+    long_dma = metrics.get("long_dma", metrics.get("dma_150"))
+    distance = metrics.get(
+        "distance_from_long_dma",
+        metrics.get("distance_from_150dma"),
+    )
     heartbeat_status = metrics["heartbeat_status"]
 
-    if current_price > dma_150:
+    if current_price > long_dma:
         score += 40
 
     if heartbeat_status == "Healthy uptrend":
         score += 30
     elif heartbeat_status == "Improving, but not confirmed":
         score += 15
-    elif heartbeat_status == "Warning: price below rising 150DMA":
+    elif heartbeat_status.startswith("Warning: price below rising "):
         score += 5
     elif heartbeat_status == "Broken trend":
         score -= 20
@@ -81,7 +104,7 @@ def calculate_chart_score(metrics: dict) -> int:
     elif distance > 35:
         score -= 10
 
-    if current_price < dma_150:
+    if current_price < long_dma:
         score -= 20
 
     return max(0, min(score, 100))
@@ -103,7 +126,7 @@ def get_action_label(metrics: dict, chart_score: int) -> str:
         return "Strong chart setup"
     elif heartbeat == "Improving, but not confirmed":
         return "Watchlist: improving"
-    elif heartbeat == "Warning: price below rising 150DMA":
+    elif heartbeat.startswith("Warning: price below rising "):
         return "Caution: trend under pressure"
     elif heartbeat == "Broken trend":
         return "Avoid: broken chart"

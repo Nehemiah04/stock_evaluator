@@ -67,6 +67,7 @@ def get_final_action(
     chart_action_label: str,
     valuation_label: str,
     profit_locker_status: str,
+    long_dma_label: str = "150DMA",
 ) -> str:
     """
     Creates a practical action based on score, chart, valuation, and Profit Locker status.
@@ -79,7 +80,7 @@ def get_final_action(
         return "Wait for pullback; trend is strong but entry risk is elevated"
 
     if "broken" in chart_action_label.lower():
-        return "Avoid until chart recovers above the 150DMA"
+        return f"Avoid until chart recovers above the {long_dma_label}"
 
     if final_score >= 85 and valuation_label in [
         "Strong undervaluation",
